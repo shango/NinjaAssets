@@ -94,9 +94,13 @@ cmds.evalDeferred(init_ninja_assets)
 
 4. Restart Maya
 
-### Step 3: Verify it worked
+### Step 3: Approve the startup script
 
-After restarting Maya, look for two things:
+The first time you open Maya after installing, you may see a popup warning that `userSetup.py` has been modified. This is expected — the installer added a few lines to that file so NinjaAssets can load on startup. Click **Yes** (or **Allow**) to approve it. You'll only see this once.
+
+### Step 4: Verify it worked
+
+After Maya finishes loading, look for two things:
 
 1. A **NinjaAssets** menu in Maya's menu bar (at the top, next to Help)
 2. A **NinjaAssets** button on your shelf

@@ -50,9 +50,13 @@ python -m ninja_assets.cli.install --scripts-dir "/path/to/maya/scripts"
 python -m ninja_assets.cli.install --uninstall
 ```
 
-### Step 3: First Launch
+### Step 3: Approve the startup script
 
-Restart Maya after installing. A setup dialog appears asking for:
+The first time you open Maya after installing, Maya may warn that `userSetup.py` was modified. Click **Yes** / **Allow** — this is expected. You'll only see this once.
+
+### Step 4: First Launch
+
+On startup, a setup dialog appears asking for:
 
 1. **Asset drive location** — Browse to the shared folder on Google Drive where your studio keeps assets. This is typically inside `Shared drives` (not `My Drive`). Everyone in the studio should point to the same folder.
 2. **Username** — The name other artists will see when you publish or save (e.g. `sarah.jones`)
