@@ -29,10 +29,11 @@ You'll get NinjaAssets as a `.zip` file. Here's how to set it up, step by step.
 ### Step 1: Unzip the folder
 
 1. Download `NinjaAssets.zip`
-2. Unzip it somewhere you'll keep it — your **Desktop**, **Documents**, or a **tools** folder all work fine
-3. **Don't leave it in Downloads** — it may get cleaned up later, which would break the install
+2. Unzip it anywhere — your **Desktop**, **Documents**, or **Downloads** all work fine
 
 After unzipping, you should have a folder called `NinjaAssets`. Inside you'll see files like `install.bat`, `install.command`, `drag_into_maya.py`, and a `ninja_assets/` subfolder. You don't need to open or edit any of these — the installer handles everything.
+
+> **Can I delete the NinjaAssets folder after installing?** Yes. The drag-and-drop and double-click installers copy everything into Maya's own folders, so you can delete (or move) the NinjaAssets folder once installation is done. Your install won't break.
 
 ### Step 2: Install (pick whichever method is easiest for you)
 
