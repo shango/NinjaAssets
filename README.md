@@ -50,14 +50,12 @@ python -m ninja_assets.cli.install --uninstall
 
 ### Step 3: First Launch
 
-Restart Maya after installing. The first time NinjaAssets loads:
+Restart Maya after installing. A setup dialog appears asking for:
 
-1. You'll be asked for your **studio username** (e.g. `sarah.jones`)
-2. NinjaAssets creates the shared folder structure on Google Drive
-3. The **NinjaAssets** menu appears in the menu bar
-4. A shelf button is added for quick access
+1. **Asset drive location** — Browse to the shared folder on Google Drive where your studio keeps assets. This is typically inside `Shared drives` (not `My Drive`). Everyone in the studio should point to the same folder.
+2. **Username** — The name other artists will see when you publish or save (e.g. `sarah.jones`)
 
-You're ready to go.
+Click **Get Started**. NinjaAssets creates the folder structure, starts syncing, and adds its menu and shelf button. Both settings can be changed later in **NinjaAssets > Settings**.
 
 ### What the installer does
 

@@ -106,16 +106,36 @@ If you see both, you're all set. If not, see the [Troubleshooting](#troubleshoot
 
 ## First Launch
 
-The first time NinjaAssets loads, you'll see a small dialog asking for your **studio username**. Type the name you want other artists to see when you publish assets or save scenes (for example, `sarah.jones` or `mike`).
+The first time NinjaAssets loads, a setup dialog appears asking for two things:
 
-After that, NinjaAssets will:
+### 1. Asset Drive Location
+
+This is the shared folder where your studio keeps its assets on Google Drive. It's **not** your personal "My Drive" folder.
+
+To find it:
+
+1. Click **Browse...**
+2. Navigate to your Google Drive (usually `G:\` on Windows or `~/Google Drive` on Mac)
+3. Open the **Shared drives** folder
+4. Select your studio's shared drive (e.g., `Shared drives/StudioName`)
+5. Click **Select Folder**
+
+If you're not sure which folder to pick, ask your pipeline TD or lead. The key thing is that everyone in the studio needs to point to the **same shared folder**.
+
+### 2. Username
+
+Type the name you want other artists to see when you publish assets or save scenes (for example, `sarah.jones` or `mike`). This is just a display name — it doesn't need to match your computer login.
+
+### After Setup
+
+Once you click **Get Started**, NinjaAssets will:
 
 - Create the shared folder structure on Google Drive (if it doesn't exist yet)
 - Start syncing asset data in the background
 - Add a **NinjaAssets** menu to Maya's menu bar
 - Add a shelf button for quick access
 
-You're ready to go.
+You can change both of these settings later in **NinjaAssets > Settings**.
 
 ---
 
@@ -312,7 +332,7 @@ Open **NinjaAssets > Settings** to customize:
 
 | Setting | What it does | Default |
 |---------|-------------|---------|
-| GDrive Root | Where your studio's shared Google Drive is mounted | `G:\` (Windows) or `~/Google Drive` (Mac) |
+| Asset Drive | The shared folder where your studio keeps assets | Set during first launch |
 | Username | Your studio name shown on published assets | Set on first launch |
 | Sync Interval | How often NinjaAssets checks for changes (seconds) | 60 |
 | Changelog Poll | How often the changelog is checked (seconds) | 30 |
@@ -329,10 +349,10 @@ You don't need to know any of this to use NinjaAssets, but it might help if you'
 
 ### Where Are My Files?
 
-Everything lives on Google Drive in a simple folder structure:
+Everything lives on a shared Google Drive folder in a simple structure. For example, if your studio's shared drive is at `G:\Shared drives\StudioName`, the layout looks like this:
 
 ```
-Google Drive
+G:\Shared drives\StudioName\
   assets/
     characters/
       hero_robot/
