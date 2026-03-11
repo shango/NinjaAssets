@@ -19,15 +19,17 @@ def capture_viewport(
     import maya.cmds as cmds
 
     if output_path is None:
-        # Generate temp path
-        fd, tmp = tempfile.mkstemp(suffix=f'.{image_format}')
-        os.close(fd)
-        output_path = Path(tmp)
+        tmp_dir = tempfile.mkdtemp(prefix="ninja_thumb_")
+        output_path = Path(tmp_dir) / "thumbnail.{}".format(image_format)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Remove existing file so playblast doesn't complain
+    if output_path.exists():
+        output_path.unlink()
+
     # playblast single frame
-    result = cmds.playblast(
+    cmds.playblast(
         frame=cmds.currentTime(query=True),
         format="image",
         compression=image_format,
@@ -36,8 +38,9 @@ def capture_viewport(
         height=height,
         showOrnaments=False,
         viewer=False,
-        filename=str(output_path.with_suffix('')),  # playblast adds extension
-        completeFilename=str(output_path)
+        completeFilename=str(output_path),
+        forceOverwrite=True,
+        percent=100,
     )
 
     return output_path
