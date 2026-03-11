@@ -24,41 +24,62 @@ This guide walks you through getting set up, finding assets, importing them into
 
 ## Installation
 
-### Automatic Install (Recommended)
+You'll get NinjaAssets as a `.zip` file. Here's how to set it up, step by step.
 
-Open a terminal or command prompt, navigate to the NinjaAssets folder, and run:
+### Step 1: Unzip the folder
 
-```
-python -m ninja_assets.cli.install
-```
+1. Download `NinjaAssets.zip`
+2. Unzip it somewhere you'll keep it — your **Desktop**, **Documents**, or a **tools** folder all work fine
+3. **Don't leave it in Downloads** — it may get cleaned up later, which would break the install
 
-That's it. The installer will:
+After unzipping, you should have a folder called `NinjaAssets`. Inside you'll see files like `install.bat`, `install.command`, `drag_into_maya.py`, and a `ninja_assets/` subfolder. You don't need to open or edit any of these — the installer handles everything.
 
-- Find your Maya installation automatically
-- Link NinjaAssets into Maya's scripts folder
-- Set it up to load every time Maya starts
+### Step 2: Install (pick whichever method is easiest for you)
 
-If you have multiple Maya versions, you can pick one:
+#### Drag and Drop (easiest)
 
-```
-python -m ninja_assets.cli.install --maya 2024
-```
+This is the simplest way — no terminal, no double-clicking batch files.
 
-To remove NinjaAssets later:
+1. Open Maya
+2. Open your file browser (Explorer on Windows, Finder on Mac) and navigate to the NinjaAssets folder you unzipped
+3. Find the file called **`drag_into_maya.py`**
+4. Drag that file from your file browser and drop it into the **Maya viewport** (the 3D view where you see your models)
+5. A dialog pops up saying "NinjaAssets installed successfully" — click **OK**
+6. **Close Maya and reopen it**
 
-```
-python -m ninja_assets.cli.install --uninstall
-```
+That's it. When Maya restarts, NinjaAssets will be loaded and ready.
 
-### Manual Install
+#### Double-Click Installer
 
-If you prefer to do it by hand:
+If you'd rather install before opening Maya:
 
-1. Copy the `ninja_assets` folder into your Maya scripts directory:
+**On Windows:**
+1. Open the NinjaAssets folder
+2. Double-click **`install.bat`**
+3. A black command window appears and shows progress
+4. When it says "Done!", press any key to close the window
+5. Open (or restart) Maya
+
+**On Mac:**
+1. Open the NinjaAssets folder
+2. Double-click **`install.command`**
+3. If macOS says the file is from an unidentified developer, right-click (or Control-click) the file and choose **Open** instead
+4. A Terminal window appears and shows progress
+5. When it says "Done!", press Enter to close the window
+6. Open (or restart) Maya
+
+#### Manual Install (advanced)
+
+If the above methods don't work, or you prefer to do it by hand:
+
+1. Find your Maya scripts folder:
    - **Windows:** `Documents\maya\2024\scripts\`
    - **Mac:** `~/Library/Preferences/Autodesk/maya/2024/scripts/`
+   - Replace `2024` with your Maya version number
 
-2. Create (or edit) a file called `userSetup.py` in that same scripts folder and add:
+2. Copy the entire `ninja_assets` subfolder (from inside the NinjaAssets folder you unzipped) into that scripts folder
+
+3. In that same scripts folder, find or create a file called `userSetup.py` and add these lines at the end:
 
 ```python
 import maya.cmds as cmds
@@ -70,7 +91,16 @@ def init_ninja_assets():
 cmds.evalDeferred(init_ninja_assets)
 ```
 
-3. Restart Maya.
+4. Restart Maya
+
+### Step 3: Verify it worked
+
+After restarting Maya, look for two things:
+
+1. A **NinjaAssets** menu in Maya's menu bar (at the top, next to Help)
+2. A **NinjaAssets** button on your shelf
+
+If you see both, you're all set. If not, see the [Troubleshooting](#troubleshooting) section below.
 
 ---
 
@@ -357,8 +387,21 @@ When you publish an asset, NinjaAssets writes to a shared log file (`changelog.j
 
 ## Troubleshooting
 
+### The drag-and-drop install didn't work
+
+- Make sure you're dragging `drag_into_maya.py` — not the whole folder, and not a different file
+- You need to drop it into the **3D viewport** (the area where your models appear), not the Script Editor or outliner
+- If Maya says it can't find the ninja_assets folder, make sure you unzipped the entire NinjaAssets folder and that `drag_into_maya.py` is still inside it (next to the `ninja_assets/` subfolder)
+- After the install dialog says "OK", you **must restart Maya** for NinjaAssets to load
+
+### The double-click installer says "Could not find Maya or Python"
+
+- Make sure Maya is installed in the default location (`C:\Program Files\Autodesk\Maya2024` on Windows or `/Applications/Autodesk/maya2024` on Mac)
+- If Maya is installed somewhere unusual, use the drag-and-drop method instead — it always works because it runs inside Maya
+
 ### NinjaAssets menu doesn't appear in Maya
 
+- Make sure you restarted Maya after installing
 - Make sure the `ninja_assets` folder is in your Maya scripts directory
 - Check that `userSetup.py` exists and contains the init code (see [Installation](#installation))
 - Open Maya's Script Editor and look for error messages mentioning "NinjaAssets"

@@ -4,21 +4,41 @@ GDrive-based asset management for Maya. Browse, import, publish, and version 3D 
 
 ## Install
 
-### Quick Install (symlink, recommended for dev)
+You'll receive NinjaAssets as a `.zip` file. Here's how to get it running.
+
+### Step 1: Unzip
+
+Download `NinjaAssets.zip` and unzip it somewhere permanent — your Desktop, Documents, or a tools folder. Avoid leaving it in Downloads (it may get cleaned up).
+
+You should end up with a folder called `NinjaAssets` containing files like `install.bat`, `install.command`, `drag_into_maya.py`, and a `ninja_assets/` subfolder.
+
+### Step 2: Install (pick one method)
+
+#### Option A: Drag into Maya (easiest)
+
+1. Open Maya
+2. Find the file `drag_into_maya.py` inside your NinjaAssets folder
+3. Drag it from your file browser into the Maya viewport
+4. A dialog confirms the install — click OK
+5. Restart Maya
+
+#### Option B: Double-click the installer
+
+- **Windows** — Double-click `install.bat`
+- **Mac** — Double-click `install.command` (if macOS asks about an unidentified developer, right-click the file and choose Open instead)
+
+The installer finds your Maya version automatically, copies the files, and tells you when it's done. Restart Maya.
+
+#### Option C: Command line (for TDs / developers)
 
 ```bash
+# Auto-detect Maya, symlink for development
 python -m ninja_assets.cli.install
-```
 
-This auto-detects your latest Maya version, symlinks the package into your scripts folder, and adds the startup hook to `userSetup.py`.
-
-### Options
-
-```bash
 # Target a specific Maya version
 python -m ninja_assets.cli.install --maya 2024
 
-# Copy files instead of symlink (for distribution)
+# Copy instead of symlink (what the double-click installers do)
 python -m ninja_assets.cli.install --maya 2024 --copy
 
 # Custom scripts directory
@@ -28,28 +48,22 @@ python -m ninja_assets.cli.install --scripts-dir "/path/to/maya/scripts"
 python -m ninja_assets.cli.install --uninstall
 ```
 
-### Manual Install
+### Step 3: First Launch
 
-1. Copy `ninja_assets/` to `Documents/maya/<version>/scripts/`
-2. Add to `Documents/maya/<version>/scripts/userSetup.py`:
+Restart Maya after installing. The first time NinjaAssets loads:
 
-```python
-import maya.cmds as cmds
+1. You'll be asked for your **studio username** (e.g. `sarah.jones`)
+2. NinjaAssets creates the shared folder structure on Google Drive
+3. The **NinjaAssets** menu appears in the menu bar
+4. A shelf button is added for quick access
 
-def init_ninja_assets():
-    from ninja_assets.maya_integration import plugin
-    plugin.initialize()
+You're ready to go.
 
-cmds.evalDeferred(init_ninja_assets)
-```
+### What the installer does
 
-3. Restart Maya.
+The installer copies the `ninja_assets` Python package into your Maya scripts folder and adds a small startup hook to `userSetup.py` so NinjaAssets loads every time Maya starts. It doesn't modify Maya itself or install anything system-wide.
 
-### First Launch
-
-On first launch you'll be prompted for your studio username. The GDrive folder structure is created automatically. The **NinjaAssets** menu and shelf button appear once initialization completes.
-
-### Platform Support
+### Platform notes
 
 | Platform | GDrive Default | Local Data |
 |----------|---------------|------------|
@@ -57,7 +71,7 @@ On first launch you'll be prompted for your studio username. The GDrive folder s
 | macOS | `~/Google Drive` | `~/Library/Application Support/NinjaAssets/` |
 | Linux | `~/Google Drive` | `~/.ninja_assets/` |
 
-Change the GDrive root in **NinjaAssets > Settings** or during first-run setup.
+Change the GDrive root in **NinjaAssets > Settings** if your Google Drive mounts somewhere different.
 
 ## Features
 
