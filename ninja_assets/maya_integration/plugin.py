@@ -63,15 +63,17 @@ def initialize(config=None):
     # Setup logging
     _setup_logging(_config.logs_dir)
 
-    # Check for username
+    # First-launch setup: ask for username and asset drive location
     if not _config.username:
-        from ninja_assets.maya_integration.ui.username_dialog import prompt_username
-        username = prompt_username()
-        if username:
+        from ninja_assets.maya_integration.ui.username_dialog import prompt_first_launch
+        result = prompt_first_launch(default_gdrive_root=_config.gdrive_root)
+        if result:
+            username, gdrive_root = result
             _config.username = username
+            _config.gdrive_root = gdrive_root
             _config.save()
         else:
-            cmds.warning("NinjaAssets: Username required to continue")
+            cmds.warning("NinjaAssets: Setup required to continue")
             return False
 
     # Check GDrive accessibility
