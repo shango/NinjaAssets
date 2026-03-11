@@ -43,6 +43,7 @@ class ProductsTab(QWidget):
         self._cat_tree = QTreeWidget()
         self._cat_tree.setHeaderHidden(True)
         self._cat_tree.setRootIsDecorated(False)
+        self._cat_tree.setToolTip("Filter assets by category")
         cat_layout.addWidget(self._cat_tree)
         sidebar_layout.addWidget(cat_group)
 
@@ -52,9 +53,16 @@ class ProductsTab(QWidget):
         self._status_group = QButtonGroup(self)
         self._status_radios = {}
 
+        status_tips = {
+            None: "Show all assets regardless of status",
+            "wip": "Work in progress — still being worked on",
+            "review": "Ready for review and feedback",
+            "approved": "Approved for use in production",
+        }
         for label_text, value in [("All", None), ("WIP", "wip"),
                                   ("Review", "review"), ("Approved", "approved")]:
             radio = QRadioButton(label_text)
+            radio.setToolTip(status_tips[value])
             self._status_group.addButton(radio)
             self._status_radios[value] = radio
             status_layout.addWidget(radio)
@@ -75,6 +83,7 @@ class ProductsTab(QWidget):
 
         self._search_edit = QLineEdit()
         self._search_edit.setPlaceholderText("Search assets...")
+        self._search_edit.setToolTip("Type to filter assets by name")
         center_layout.addWidget(self._search_edit)
 
         self._grid = ThumbnailGrid(thumb_size=100)

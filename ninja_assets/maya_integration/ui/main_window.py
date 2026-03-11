@@ -34,10 +34,12 @@ class NinjaAssetsWindow(QMainWindow):
         # Products tab
         self._products_tab = self._create_products_tab()
         self._tabs.addTab(self._products_tab, "Products")
+        self._tabs.setTabToolTip(0, "Browse and import assets from the studio library")
 
         # Scenefiles tab
         self._scenefiles_tab = self._create_scenefiles_tab()
         self._tabs.addTab(self._scenefiles_tab, "Scenefiles")
+        self._tabs.setTabToolTip(1, "Save and manage versions of your current scene")
 
         # Status bar
         self._status_bar = QStatusBar()

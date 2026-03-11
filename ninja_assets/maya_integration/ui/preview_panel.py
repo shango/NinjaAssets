@@ -70,6 +70,7 @@ class PreviewPanel(QFrame):
         ver_layout = QHBoxLayout()
         ver_layout.addWidget(QLabel("Version:"))
         self._version_combo = QComboBox()
+        self._version_combo.setToolTip("Pick a version to import or reference")
         self._version_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._version_combo.currentIndexChanged.connect(self._on_version_changed)
         ver_layout.addWidget(self._version_combo)
@@ -88,9 +89,13 @@ class PreviewPanel(QFrame):
         btn_layout.setSpacing(6)
 
         self._import_btn = QPushButton("Import")
+        self._import_btn.setToolTip("Import a copy of this asset into your scene")
         self._reference_btn = QPushButton("Reference")
+        self._reference_btn.setToolTip("Reference this asset — stays linked to the original file")
         self._open_folder_btn = QPushButton("Open Folder")
+        self._open_folder_btn.setToolTip("Show this asset's folder in your file browser")
         self._copy_path_btn = QPushButton("Copy Path")
+        self._copy_path_btn.setToolTip("Copy the file path to your clipboard")
 
         for btn in (self._import_btn, self._reference_btn,
                     self._open_folder_btn, self._copy_path_btn):

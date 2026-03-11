@@ -34,7 +34,9 @@ class SettingsDialog(QDialog):
         paths_form = QFormLayout()
 
         self._gdrive_edit = QLineEdit()
+        self._gdrive_edit.setToolTip("Path to the shared asset folder on Google Drive")
         browse_btn = QPushButton("Browse...")
+        browse_btn.setToolTip("Pick the shared folder in a file browser")
         browse_btn.setObjectName("browse_btn")
         browse_btn.clicked.connect(self._browse_gdrive)
         gdrive_layout = QHBoxLayout()
@@ -50,6 +52,7 @@ class SettingsDialog(QDialog):
         user_form = QFormLayout()
 
         self._username_edit = QLineEdit()
+        self._username_edit.setToolTip("The name shown when you publish or save")
         user_form.addRow("Username:", self._username_edit)
 
         user_group.setLayout(user_form)
@@ -62,11 +65,13 @@ class SettingsDialog(QDialog):
         self._sync_interval_spin = QSpinBox()
         self._sync_interval_spin.setRange(10, 300)
         self._sync_interval_spin.setSuffix(" seconds")
+        self._sync_interval_spin.setToolTip("How often to check Google Drive for changes — higher = less background load")
         sync_form.addRow("Sync Interval:", self._sync_interval_spin)
 
         self._changelog_poll_spin = QSpinBox()
         self._changelog_poll_spin.setRange(5, 120)
         self._changelog_poll_spin.setSuffix(" seconds")
+        self._changelog_poll_spin.setToolTip("How often to check the shared changelog for new publishes")
         sync_form.addRow("Changelog Poll:", self._changelog_poll_spin)
 
         sync_group.setLayout(sync_form)
@@ -79,11 +84,13 @@ class SettingsDialog(QDialog):
         self._grid_size_spin = QSpinBox()
         self._grid_size_spin.setRange(50, 200)
         self._grid_size_spin.setSuffix(" px")
+        self._grid_size_spin.setToolTip("Size of thumbnails in the asset browser grid")
         ui_form.addRow("Thumbnail Grid Size:", self._grid_size_spin)
 
         self._preview_size_spin = QSpinBox()
         self._preview_size_spin.setRange(100, 500)
         self._preview_size_spin.setSuffix(" px")
+        self._preview_size_spin.setToolTip("Size of the large preview thumbnail at the bottom")
         ui_form.addRow("Preview Thumbnail Size:", self._preview_size_spin)
 
         ui_group.setLayout(ui_form)

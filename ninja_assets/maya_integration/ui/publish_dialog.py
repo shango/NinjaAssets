@@ -46,11 +46,13 @@ class PublishDialog(QDialog):
         # Asset name
         self._name_edit = QLineEdit()
         self._name_edit.setPlaceholderText("e.g. hero_sword")
+        self._name_edit.setToolTip("Short name using underscores, no spaces — reuse an existing name to add a new version")
         form.addRow("Name:", self._name_edit)
 
         # Category
         self._category_combo = QComboBox()
         self._category_combo.addItems(CATEGORIES)
+        self._category_combo.setToolTip("Where this asset lives in the library")
         form.addRow("Category:", self._category_combo)
 
         # Version
@@ -58,19 +60,24 @@ class PublishDialog(QDialog):
         self._version_spin.setMinimum(1)
         self._version_spin.setMaximum(9999)
         self._version_spin.setValue(1)
+        self._version_spin.setToolTip("Auto-increments for existing assets — change manually if needed")
         form.addRow("Version:", self._version_spin)
 
         # Tags
         self._tags_edit = QLineEdit()
         self._tags_edit.setPlaceholderText("comma-separated tags")
+        self._tags_edit.setToolTip("Keywords to help others find this asset (e.g. weapon, scifi, rifle)")
         form.addRow("Tags:", self._tags_edit)
 
         # Format
         format_layout = QHBoxLayout()
         self._format_group = QButtonGroup(self)
         self._obj_radio = QRadioButton("OBJ")
+        self._obj_radio.setToolTip("Export as .obj — lightweight, widely compatible")
         self._ma_radio = QRadioButton("Maya ASCII")
+        self._ma_radio.setToolTip("Export as .ma — preserves Maya-specific data")
         self._both_radio = QRadioButton("Both")
+        self._both_radio.setToolTip("Export both .obj and .ma files")
         self._both_radio.setChecked(True)
         self._format_group.addButton(self._obj_radio)
         self._format_group.addButton(self._ma_radio)
@@ -83,6 +90,7 @@ class PublishDialog(QDialog):
         # Comment
         self._comment_edit = QLineEdit()
         self._comment_edit.setPlaceholderText("Version comment")
+        self._comment_edit.setToolTip("Brief note about this version (e.g. \"Fixed topology\" or \"Initial blockout\")")
         form.addRow("Comment:", self._comment_edit)
 
         layout.addLayout(form)
@@ -98,7 +106,9 @@ class PublishDialog(QDialog):
 
         thumb_btn_layout = QVBoxLayout()
         self._capture_btn = QPushButton("Capture from Viewport")
+        self._capture_btn.setToolTip("Grab the current viewport as a thumbnail — frame your model first")
         self._load_thumb_btn = QPushButton("Load from File...")
+        self._load_thumb_btn.setToolTip("Pick an image file from disk to use as the thumbnail")
         thumb_btn_layout.addWidget(self._capture_btn)
         thumb_btn_layout.addWidget(self._load_thumb_btn)
         thumb_btn_layout.addStretch()
@@ -116,6 +126,7 @@ class PublishDialog(QDialog):
         btn_layout.addStretch()
         cancel_btn = QPushButton("Cancel")
         self._publish_btn = QPushButton("Publish")
+        self._publish_btn.setToolTip("Export the selected objects and share with the studio")
         self._publish_btn.setDefault(True)
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(self._publish_btn)

@@ -59,6 +59,7 @@ class SaveVersionDialog(QDialog):
         self._version_spin = QSpinBox()
         self._version_spin.setMinimum(1)
         self._version_spin.setMaximum(9999)
+        self._version_spin.setToolTip("Version number for the new save — change if you want to skip ahead")
         form.addRow("Version:", self._version_spin)
 
         layout.addLayout(form)
@@ -67,11 +68,13 @@ class SaveVersionDialog(QDialog):
         layout.addWidget(QLabel("Comment:"))
         self._comment_edit = QTextEdit()
         self._comment_edit.setPlaceholderText("Describe changes...")
+        self._comment_edit.setToolTip("What changed since the last version? Helps you and others find the right save later")
         self._comment_edit.setMaximumHeight(100)
         layout.addWidget(self._comment_edit)
 
         # Open after saving checkbox
         self._open_after_cb = QCheckBox("Open new version after saving")
+        self._open_after_cb.setToolTip("Switch to the newly saved file — uncheck to stay on the current file")
         self._open_after_cb.setChecked(True)
         layout.addWidget(self._open_after_cb)
 
@@ -84,6 +87,7 @@ class SaveVersionDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
 
         self._save_btn = QPushButton("Save Version")
+        self._save_btn.setToolTip("Save the scene as a new versioned file")
         self._save_btn.setDefault(True)
         self._save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(self._save_btn)

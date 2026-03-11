@@ -64,6 +64,7 @@ class ScenefilesTab(QWidget):
         mid_layout = QVBoxLayout(mid_group)
 
         self._table = QTableWidget(0, 5)
+        self._table.setToolTip("Double-click a version to open it — right-click for more options")
         self._table.setHorizontalHeaderLabels(
             ["", "File", "Comment", "Author", "Date"]
         )
@@ -93,14 +94,17 @@ class ScenefilesTab(QWidget):
         self._version_spin = QSpinBox()
         self._version_spin.setMinimum(1)
         self._version_spin.setMaximum(9999)
+        self._version_spin.setToolTip("Version number for the new save — auto-increments, but you can change it")
         bot_layout.addWidget(self._version_spin)
 
         bot_layout.addWidget(QLabel("Comment:"))
         self._comment_edit = QLineEdit()
         self._comment_edit.setPlaceholderText("Describe changes...")
+        self._comment_edit.setToolTip("Short note about what changed in this version")
         bot_layout.addWidget(self._comment_edit, stretch=1)
 
         self._save_btn = QPushButton("Save Version")
+        self._save_btn.setToolTip("Save the current scene as a new versioned file")
         self._save_btn.clicked.connect(self._on_save_version)
         bot_layout.addWidget(self._save_btn)
 
