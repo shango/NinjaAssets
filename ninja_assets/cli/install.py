@@ -20,6 +20,11 @@ from pathlib import Path
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent  # ninja_assets/
 REPO_ROOT = PACKAGE_ROOT.parent
 
+# Ensure the repo root is on sys.path so `python -m ninja_assets.cli.install`
+# works even when invoked via mayapy from a double-click script.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 SETUP_HOOK = '''
 # --- NinjaAssets ---
 def _init_ninja_assets():
@@ -215,14 +220,15 @@ def main():
             print("Use --maya VERSION or --scripts-dir PATH")
             sys.exit(1)
 
-    print(f"NinjaAssets {'uninstaller' if args.uninstall else 'installer'}")
-    print(f"  Maya version: {version}")
-    print(f"  Scripts dir:  {scripts_dir}")
-    print()
-
     if args.uninstall:
+        print(f"  Removing NinjaAssets from Maya {version}...")
+        print(f"  Location: {scripts_dir}")
+        print()
         uninstall(scripts_dir)
     else:
+        print(f"  Installing NinjaAssets for Maya {version}...")
+        print(f"  Location: {scripts_dir}")
+        print()
         install(scripts_dir, use_symlink=not args.copy)
 
 
