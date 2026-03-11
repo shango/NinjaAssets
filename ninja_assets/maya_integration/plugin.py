@@ -155,10 +155,19 @@ def _on_assets_changed(changed_uuids):
 
 def show_browser():
     """Show the NinjaAssets browser window."""
+    import maya.cmds as cmds
     global _main_window
 
     if _main_window is None:
-        from ninja_assets.maya_integration.ui.main_window import NinjaAssetsWindow
+        try:
+            from ninja_assets.maya_integration.ui.main_window import NinjaAssetsWindow
+        except ImportError as e:
+            cmds.warning(
+                "NinjaAssets: Cannot open browser — PySide not available. "
+                "This usually means Maya's Qt libraries aren't loaded yet. "
+                "Try again in a moment. ({})".format(e)
+            )
+            return
         _main_window = NinjaAssetsWindow()
 
     _main_window.show()
