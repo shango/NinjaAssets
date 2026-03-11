@@ -18,85 +18,35 @@ This guide walks you through getting set up, finding assets, importing them into
 8. [Keyboard Shortcuts](#keyboard-shortcuts)
 9. [Settings](#settings)
 10. [How It Works Behind the Scenes](#how-it-works-behind-the-scenes)
-11. [Troubleshooting](#troubleshooting)
+11. [Alternate Install Methods](#alternate-install-methods)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Installation
 
-You'll get NinjaAssets as a `.zip` file. Here's how to set it up, step by step.
+You'll get NinjaAssets as a `.zip` file. Installation takes about a minute.
 
-### Step 1: Unzip the folder
+### Step 1: Unzip
 
-1. Download `NinjaAssets.zip`
-2. Unzip it anywhere — your **Desktop**, **Documents**, or **Downloads** all work fine
+Download `NinjaAssets.zip` and unzip it anywhere — your Desktop, Documents, or Downloads all work.
 
-After unzipping, you should have a folder called `NinjaAssets`. Inside you'll see files like `install.bat`, `install.command`, `drag_into_maya.py`, and a `ninja_assets/` subfolder. You don't need to open or edit any of these — the installer handles everything.
+### Step 2: Drag into Maya
 
-> **Can I delete the NinjaAssets folder after installing?** Yes. The drag-and-drop and double-click installers copy everything into Maya's own folders, so you can delete (or move) the NinjaAssets folder once installation is done. Your install won't break.
-
-### Step 2: Install (pick whichever method is easiest for you)
-
-#### Drag and Drop (easiest)
-
-This is the simplest way — no terminal, no double-clicking batch files.
-
-1. Open Maya
-2. Open your file browser (Explorer on Windows, Finder on Mac) and navigate to the NinjaAssets folder you unzipped
-3. Find the file called **`drag_into_maya.py`**
-4. Drag that file from your file browser and drop it into the **Maya viewport** (the 3D view where you see your models)
+1. Open **Maya**
+2. Open your file browser (Explorer on Windows, Finder on Mac) and find the **NinjaAssets** folder you just unzipped
+3. Inside that folder, find the file called **`drag_into_maya.py`**
+4. Drag that file from your file browser and **drop it into the Maya viewport** (the 3D view where you see your models)
 5. A dialog pops up saying "NinjaAssets installed successfully" — click **OK**
 6. **Close Maya and reopen it**
 
-That's it. When Maya restarts, NinjaAssets will be loaded and ready.
+That's it — NinjaAssets is now installed.
 
-#### Double-Click Installer
-
-If you'd rather install before opening Maya:
-
-**On Windows:**
-1. Open the NinjaAssets folder
-2. Double-click **`install.bat`**
-3. A black command window appears and shows progress
-4. When it says "Done!", press any key to close the window
-5. Open (or restart) Maya
-
-**On Mac:**
-1. Open the NinjaAssets folder
-2. Double-click **`install.command`**
-3. If macOS says the file is from an unidentified developer, right-click (or Control-click) the file and choose **Open** instead
-4. A Terminal window appears and shows progress
-5. When it says "Done!", press Enter to close the window
-6. Open (or restart) Maya
-
-#### Manual Install (advanced)
-
-If the above methods don't work, or you prefer to do it by hand:
-
-1. Find your Maya scripts folder:
-   - **Windows:** `Documents\maya\2024\scripts\`
-   - **Mac:** `~/Library/Preferences/Autodesk/maya/2024/scripts/`
-   - Replace `2024` with your Maya version number
-
-2. Copy the entire `ninja_assets` subfolder (from inside the NinjaAssets folder you unzipped) into that scripts folder
-
-3. In that same scripts folder, find or create a file called `userSetup.py` and add these lines at the end:
-
-```python
-import maya.cmds as cmds
-
-def init_ninja_assets():
-    from ninja_assets.maya_integration import plugin
-    plugin.initialize()
-
-cmds.evalDeferred(init_ninja_assets)
-```
-
-4. Restart Maya
+> **Can I delete the NinjaAssets folder after installing?** Yes. The installer copies everything into Maya's own folders, so you can delete or move the NinjaAssets folder once you're done. Your install won't break.
 
 ### Step 3: Approve the startup script
 
-The first time you open Maya after installing, you may see a popup warning that `userSetup.py` has been modified. This is expected — the installer added a few lines to that file so NinjaAssets can load on startup. Click **Yes** (or **Allow**) to approve it. You'll only see this once.
+The first time Maya restarts after installing, you may see a popup warning that `userSetup.py` has been modified. This is expected — the installer added a few lines to that file so NinjaAssets can load on startup. Click **Yes** (or **Allow**) to approve it. You'll only see this once.
 
 ### Step 4: Verify it worked
 
@@ -105,7 +55,9 @@ After Maya finishes loading, look for two things:
 1. A **NinjaAssets** menu in Maya's menu bar (at the top, next to Help)
 2. A **NinjaAssets** button on your shelf
 
-If you see both, you're all set. If not, see the [Troubleshooting](#troubleshooting) section below.
+If you see both, you're all set. If not, see the [Troubleshooting](#troubleshooting) section at the end of this guide.
+
+> **Having trouble with drag-and-drop?** See [Alternate Install Methods](#alternate-install-methods) for other ways to install.
 
 ---
 
@@ -407,6 +359,67 @@ The sync engine keeps this cache updated in the background. If things ever get o
 ### How Syncing Works
 
 When you publish an asset, NinjaAssets writes to a shared log file (`changelog.jsonl`). Other artists' Maya sessions pick up these changes within about 30-60 seconds. The system also does random spot-checks to catch anything the log might have missed.
+
+---
+
+## Alternate Install Methods
+
+If the drag-and-drop method didn't work for you, here are two other ways to install NinjaAssets.
+
+### Double-Click Installer
+
+This method works without having Maya open.
+
+**On Windows:**
+1. Open the NinjaAssets folder you unzipped
+2. Double-click **`install.bat`**
+3. A black command window appears and shows progress
+4. When it says "Done!", press any key to close the window
+5. Open (or restart) Maya
+
+**On Mac:**
+1. Open the NinjaAssets folder you unzipped
+2. Double-click **`install.command`**
+3. If macOS says the file is from an unidentified developer, right-click (or Control-click) the file and choose **Open** instead
+4. A Terminal window appears and shows progress
+5. When it says "Done!", press Enter to close the window
+6. Open (or restart) Maya
+
+### Manual Install
+
+If neither of the above methods work, you can install by hand:
+
+1. Find your Maya scripts folder:
+   - **Windows:** `Documents\maya\2024\scripts\`
+   - **Mac:** `~/Library/Preferences/Autodesk/maya/2024/scripts/`
+   - Replace `2024` with your Maya version number
+
+2. Copy the entire `ninja_assets` subfolder (from inside the NinjaAssets folder you unzipped) into that scripts folder
+
+3. In that same scripts folder, find or create a file called `userSetup.py` and add these lines at the end:
+
+```python
+import maya.cmds as cmds
+
+def init_ninja_assets():
+    from ninja_assets.maya_integration import plugin
+    plugin.initialize()
+
+cmds.evalDeferred(init_ninja_assets)
+```
+
+4. Restart Maya
+
+### Command Line (for TDs / developers)
+
+```
+python -m ninja_assets.cli.install              # auto-detect Maya, symlink
+python -m ninja_assets.cli.install --maya 2024  # target a specific version
+python -m ninja_assets.cli.install --copy       # copy instead of symlink
+python -m ninja_assets.cli.install --uninstall  # remove NinjaAssets
+```
+
+> **Note:** The command-line installer uses symlinks by default, which means the NinjaAssets folder must stay where it is. Use `--copy` if you want to delete it afterward.
 
 ---
 
