@@ -21,7 +21,7 @@ try:
         QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem,
         QHeaderView, QAbstractItemView,
         QScrollArea, QSizePolicy, QSpacerItem,
-        QMenu, QAction, QToolBar, QStatusBar,
+        QMenu, QToolBar, QStatusBar,
         QFileDialog, QMessageBox, QInputDialog,
         QStyle, QStyleFactory,
         QLayout, QLayoutItem,
@@ -33,6 +33,7 @@ try:
         QMimeData, QEvent,
     )
     from PySide6.QtGui import (  # noqa: F401
+        QAction,
         QPixmap, QImage, QIcon, QFont, QColor, QPalette,
         QCursor, QPainter, QBrush, QPen,
         QKeySequence, QShortcut,

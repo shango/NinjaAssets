@@ -106,11 +106,17 @@ def _install():
     print("NinjaAssets: Restart Maya to load.")
 
 
-# --- Run on drag-and-drop ---
-try:
-    import maya.cmds
+# --- Maya drag-and-drop entry point ---
+# Maya calls this function when a .py file is dropped into the viewport.
+def onMayaDroppedPythonFile(*args, **kwargs):
     _install()
-except ImportError:
-    # Not running inside Maya
-    print("This script is meant to be dragged into Maya's viewport.")
-    print("For command-line install, use: python -m ninja_assets.cli.install")
+
+
+# Also run directly for backwards compat (e.g. execfile or script editor)
+if __name__ == "__main__":
+    try:
+        import maya.cmds
+        _install()
+    except ImportError:
+        print("This script is meant to be dragged into Maya's viewport.")
+        print("For command-line install, use: python -m ninja_assets.cli.install")
