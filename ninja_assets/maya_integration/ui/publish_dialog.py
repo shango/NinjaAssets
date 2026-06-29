@@ -3,16 +3,15 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from ninja_assets.maya_integration.ui.qt_compat import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QSpinBox, QPushButton,
     QRadioButton, QButtonGroup, QPixmap, QMessageBox,
-    QFileDialog, Qt, QSizePolicy,
+    QFileDialog, Qt,
 )
 from ninja_assets.constants import CATEGORIES
-from ninja_assets.core.models import Asset, Version, AssetStatus, ChangelogEvent, EventType
+from ninja_assets.core.models import Asset, Version, ChangelogEvent, EventType
 
 logger = logging.getLogger(__name__)
 

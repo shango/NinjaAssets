@@ -1,12 +1,11 @@
 """Tests for CLI utilities."""
 
 import json
-from pathlib import Path
 
 from ninja_assets.cli.init_gdrive import init_gdrive
 from ninja_assets.cli.migrate import find_orphaned_assets, migrate
 from ninja_assets.constants import CATEGORIES, SCHEMA_VERSION, SIDECAR_SUFFIX
-from ninja_assets.core.sidecar import SidecarManager
+from ninja_assets.core.changelog import ChangelogManager
 
 
 def test_init_gdrive_creates_structure(tmp_path):
@@ -157,3 +156,38 @@ def test_migrate_skips_existing(tmp_path):
     assert len(migrated) == 0
     # Verify sidecar was not modified
     assert sidecar.read_text() == original_content
+
+
+def test_migrate_appends_changelog(tmp_path):
+    """Migrate with a changelog path appends ASSET_CREATED events."""
+    assets_root = tmp_path / "assets"
+
+    barrel_dir = assets_root / "props" / "barrel"
+    barrel_dir.mkdir(parents=True)
+    (barrel_dir / "barrel.obj").touch()
+
+    hero_dir = assets_root / "characters" / "hero"
+    hero_dir.mkdir(parents=True)
+    (hero_dir / "hero.fbx").touch()
+
+    changelog_path = tmp_path / "changelog.jsonl"
+
+    migrated = migrate(
+        assets_root, user="testuser", dry_run=False,
+        changelog_path=changelog_path,
+    )
+
+    assert len(migrated) == 2
+
+    # Verify changelog events were written
+    mgr = ChangelogManager(changelog_path)
+    events = mgr.read_all()
+    assert len(events) == 2
+
+    event_names = {e.uuid for e in events}
+    assert len(event_names) == 2  # unique UUIDs
+
+    for event in events:
+        assert event.event_type.value == "asset_created"
+        assert event.user == "testuser"
+        assert event.version == 1

@@ -1,13 +1,10 @@
 """Tests for SyncEngine."""
 
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
-import pytest
 
-from ninja_assets.config import NinjaConfig
 from ninja_assets.core.cache import CacheDB
 from ninja_assets.core.changelog import ChangelogManager
 from ninja_assets.core.models import Asset, ChangelogEvent, EventType
@@ -283,6 +280,22 @@ class TestEngineIntegration:
         assert cached is not None
         assert cached.name == "warrior"
         assert cached.category == "Characters"
+
+    def test_start_without_initial_scan_skips_scan(self, fake_gdrive, tmp_path):
+        """start(initial_scan=False) does not full-scan remotes (warm-cache reload)."""
+        config = fake_gdrive
+        config.changelog_poll_interval = 1
+        cache = CacheDB(db_path=tmp_path / "cache.sqlite")
+
+        asset = create_test_asset(config.gdrive_root, "Characters", "warrior")
+
+        engine = SyncEngine(config, cache)
+        engine.start(initial_scan=False)
+        time.sleep(0.5)
+        engine.stop()
+
+        # Asset on disk was never scanned into the (empty) cache.
+        assert cache.get_asset(asset.uuid) is None
 
     def test_changelog_offset_restored_on_start(self, fake_gdrive, tmp_path):
         """Engine restores changelog offset from cache sync_state on start."""

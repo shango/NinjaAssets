@@ -2,12 +2,18 @@
 NinjaAssets Installer — Drag-and-Drop for Maya
 
 Drag this file into Maya's viewport to install NinjaAssets.
-It will copy the ninja_assets package into your Maya scripts folder
-and set it up to load automatically on startup.
+It copies the ninja_assets package into your Maya scripts folder and sets it up
+to load automatically on startup.
+
+Upgrading: drag this file in again to copy the new version, then click the
+NinjaAssets shelf button. The shelf button detects the newer build and reloads
+it in place — no Maya restart required.
 """
 import os
 import shutil
 import sys
+import time
+import uuid
 
 # --- Find where this script lives (the NinjaAssets folder) ---
 _THIS_FILE = os.path.abspath(__file__ if "__file__" in dir() else
@@ -34,6 +40,29 @@ import maya.cmds as cmds
 cmds.evalDeferred(_init_ninja_assets)
 # --- /NinjaAssets ---
 '''
+
+
+def _write_build_stamp(target_dir):
+    """Write a unique per-install stamp so the running plugin can detect upgrades.
+
+    Pure file I/O (no maya import) so it's unit-testable. Returns the value.
+    """
+    value = "{}-{}".format(int(time.time()), uuid.uuid4().hex[:8])
+    with open(os.path.join(target_dir, "_build_stamp.txt"), "w", encoding="utf-8") as f:
+        f.write(value)
+    return value
+
+
+def _is_already_running():
+    """True when a NinjaAssets plugin is already initialized in this session."""
+    mod = sys.modules.get("ninja_assets.maya_integration.plugin")
+    if not mod:
+        return False
+    try:
+        return mod.is_initialized()
+    except AttributeError:
+        # Older installed version without is_initialized(); fall back to cache ref.
+        return getattr(mod, "_cache", None) is not None
 
 
 def _get_scripts_dir():
@@ -68,14 +97,22 @@ def _install():
     os.makedirs(scripts_dir, exist_ok=True)
     target = os.path.join(scripts_dir, "ninja_assets")
 
+    # An upgrade is when a plugin is already live in this Maya session.
+    upgrading = _is_already_running()
+
     # Remove old installation if present
     if os.path.islink(target):
         os.unlink(target)
     elif os.path.isdir(target):
         shutil.rmtree(target)
 
-    # Copy the package
+    # Copy the package and stamp this build so the running plugin can detect it.
     shutil.copytree(_PACKAGE_SRC, target)
+    _write_build_stamp(target)
+
+    # Make sure the installed copy is importable this session.
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
 
     # Add startup hook to userSetup.py
     setup_file = os.path.join(scripts_dir, "userSetup.py")
@@ -90,12 +127,40 @@ def _install():
                 f.write("\n")
             f.write(_SETUP_HOOK)
 
-    # Done — tell the artist
-    msg = (
-        "NinjaAssets installed successfully!\n\n"
-        "Restart Maya to start using NinjaAssets.\n\n"
-        "Files installed to:\n" + scripts_dir
-    )
+    if upgrading:
+        # Old modules are still cached in this session. Don't reload mid-drag;
+        # the shelf button reconciles the new build on the next click.
+        msg = (
+            "NinjaAssets updated!\n\n"
+            "Click the NinjaAssets shelf button to apply the update.\n"
+            "No restart required.\n\n"
+            "Updated files in:\n" + scripts_dir
+        )
+        cmds.confirmDialog(
+            title="NinjaAssets Updater",
+            message=msg,
+            button=["OK"],
+            defaultButton="OK",
+        )
+        print("NinjaAssets: Updated in " + scripts_dir)
+        print("NinjaAssets: Click the shelf button to apply (no restart needed).")
+        return
+
+    # Fresh install — nothing is loaded yet, so initialize right now. No restart.
+    started = _try_initialize()
+    if started:
+        msg = (
+            "NinjaAssets installed and ready!\n\n"
+            "Look for the NinjaAssets shelf button and menu.\n"
+            "No restart required.\n\n"
+            "Files installed to:\n" + scripts_dir
+        )
+    else:
+        msg = (
+            "NinjaAssets installed successfully!\n\n"
+            "Restart Maya to start using NinjaAssets.\n\n"
+            "Files installed to:\n" + scripts_dir
+        )
     cmds.confirmDialog(
         title="NinjaAssets Installer",
         message=msg,
@@ -103,7 +168,17 @@ def _install():
         defaultButton="OK",
     )
     print("NinjaAssets: Installed to " + scripts_dir)
-    print("NinjaAssets: Restart Maya to load.")
+
+
+def _try_initialize():
+    """Import the freshly installed package and initialize it. Returns success."""
+    try:
+        from ninja_assets.maya_integration import plugin
+        return bool(plugin.initialize())
+    except Exception as e:
+        import maya.cmds as cmds
+        cmds.warning("NinjaAssets: installed, but could not start automatically: {}".format(e))
+        return False
 
 
 # --- Maya drag-and-drop entry point ---

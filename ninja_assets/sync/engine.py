@@ -33,9 +33,19 @@ class SyncEngine:
         self._force_scan_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._changelog_offset: int = 0
+        self._initial_scan: bool = True
 
-    def start(self):
-        """Start background sync thread. Thread is daemon=True."""
+    def start(self, initial_scan: bool = True):
+        """Start background sync thread. Thread is daemon=True.
+
+        Args:
+            initial_scan: When True (normal Maya startup) the background thread
+                does a full scan of every remote before entering the poll loop.
+                Pass False on a hot-reload, where the SQLite cache is already
+                warm and only changelog catch-up / spot-checks are needed, so an
+                upgrade doesn't re-walk every remote folder.
+        """
+        self._initial_scan = initial_scan
         saved = self.cache.get_sync_state("changelog_offset")
         if saved is not None:
             self._changelog_offset = int(saved)
@@ -82,12 +92,15 @@ class SyncEngine:
            c. If force_full_scan requested: full scan
            d. Check stop event
         """
-        # Initial full scan
-        try:
-            changed = self._scanner.full_scan()
-            self._notify_changes(changed)
-        except Exception:
-            logger.exception("Error during initial full scan")
+        # Initial full scan (skipped on hot-reload — cache is already warm)
+        if self._initial_scan:
+            try:
+                changed = self._scanner.full_scan()
+                self._notify_changes(changed)
+            except Exception:
+                logger.exception("Error during initial full scan")
+        else:
+            logger.info("Sync engine started without initial scan (warm cache)")
 
         last_spot_check = time.monotonic()
 

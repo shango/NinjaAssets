@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from ninja_assets.config import NinjaConfig
 from ninja_assets.constants import SIDECAR_SUFFIX
@@ -75,7 +75,7 @@ class SyncResolver:
 
         return changed
 
-    def _find_sidecar(self, asset_folder: Path) -> Path | None:
+    def _find_sidecar(self, asset_folder: Path) -> Optional[Path]:
         """Find the .meta.json sidecar file in an asset folder."""
         if not asset_folder.is_dir():
             return None

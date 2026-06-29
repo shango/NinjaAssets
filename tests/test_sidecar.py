@@ -1,6 +1,5 @@
 """Tests for SidecarManager."""
 
-import json
 import time
 
 import pytest

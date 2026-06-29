@@ -18,7 +18,6 @@ from ninja_assets.maya_integration.ui.qt_compat import (
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
-    Qt,
 )
 
 logger = logging.getLogger("ninja_assets")

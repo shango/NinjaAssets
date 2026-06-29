@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 
 from ..constants import SIDECAR_SUFFIX
 from .exceptions import ConflictError, SidecarError
-from .models import Asset, AssetStatus
+from .models import Asset
 
 
 class SidecarManager:

@@ -1,9 +1,7 @@
 """Tests for the install CLI."""
-import os
-from pathlib import Path
 
 from ninja_assets.cli.install import (
-    install, uninstall, _inject_hook, _remove_hook,
+    install, uninstall, _inject_hook, _remove_hook, write_build_stamp,
     HOOK_START, HOOK_END,
 )
 
@@ -65,6 +63,9 @@ class TestInstallUninstall:
         assert not target.is_symlink()
         # Should have copied actual files
         assert (target / "__init__.py").exists()
+        # And stamped the build so upgrades can be detected
+        assert (target / "_build_stamp.txt").exists()
+        assert (target / "_build_stamp.txt").read_text().strip()
 
     def test_uninstall_removes_symlink(self, tmp_path):
         scripts_dir = tmp_path / "scripts"
@@ -83,3 +84,17 @@ class TestInstallUninstall:
 
         target = scripts_dir / "ninja_assets"
         assert target.is_symlink()
+
+
+class TestBuildStamp:
+    def test_writes_file(self, tmp_path):
+        value = write_build_stamp(tmp_path)
+        stamp = tmp_path / "_build_stamp.txt"
+        assert stamp.exists()
+        assert stamp.read_text() == value
+        assert value
+
+    def test_unique_per_call(self, tmp_path):
+        a = write_build_stamp(tmp_path)
+        b = write_build_stamp(tmp_path)
+        assert a != b

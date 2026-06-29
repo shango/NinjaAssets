@@ -1,7 +1,6 @@
 """Shared test fixtures for NinjaAssets."""
 
 import pytest
-from pathlib import Path
 
 from ninja_assets.config import NinjaConfig
 from ninja_assets.constants import CATEGORIES

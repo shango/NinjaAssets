@@ -1,16 +1,25 @@
 # NinjaAssets
 ## Product Requirements Document
 
-**GDrive-Based Asset Management for Maya**
+**Cloud/Synced-Folder Asset Management for Maya** *(multi-remote + local repo)*
 
 | Document Info | |
 |---------------|-------------|
-| Version | 1.0 |
-| Date | March 2026 |
+| Version | 1.1 |
+| Date | June 2026 |
 | Status | Draft |
 | Platform | Maya 2022+ / Windows |
-| Storage Backend | Google Drive Desktop |
+| Storage Backend | Cloud/synced folders (one or more remotes; Google Drive Desktop, Dropbox, OneDrive, NAS, etc.) |
 | Scale | ~1,000 assets / ~500 artists |
+
+---
+
+## Revision History
+
+| Version | Date | Summary |
+|---------|------|---------|
+| 1.0 | March 2026 | Initial design: single Google Drive root, local SQLite cache, Products/Scenefiles tabs. |
+| 1.1 | June 2026 | **Multi-remote + local repo model.** Adds a **Setup tab** to register a **local repo** and one or more **remote repos** (cloud/synced folders); the scanner builds a searchable metadata + thumbnail library aggregated across all remotes (each asset tagged with its `source_repo`); import gains an optional **"pull to local"** that copies the asset into the local repo first; Products gains a **repo filter**. Cache schema bumped to v2 (`source_repo`, `local_path`). Backward compatible: an existing single `gdrive_root` is treated as the default remote. **UI cleanup:** the workflow STATUS surface (sidebar filter, card badge, preview line) was removed from the browser; the `status` field remains in the model/sidecar/Publish dialog. |
 
 ---
 
@@ -40,7 +49,11 @@ A VFX studio with approximately 500 artists requires a lightweight asset managem
 NinjaAssets is a distributed, eventually-consistent asset management system featuring:
 
 - Prism-inspired UI integrated natively into Maya
-- JSON sidecar metadata files stored alongside assets on GDrive
+- JSON sidecar metadata files stored alongside assets on cloud/synced storage
+- One or more **remote repos** (cloud/synced folders) plus a **local repo** the artist can pull assets into
+- A **Setup tab** for pointing at the local repo and registering/scanning remote repos
+- A searchable metadata + thumbnail library aggregated across **all** remotes
+- Optional **pull-to-local** on import (copy the asset into the local repo, then import from the local copy)
 - Local SQLite cache on each workstation for instant queries
 - Append-only changelog for near-real-time sync across 500+ workstations
 - Maya-only interface (no external applications required)
@@ -58,6 +71,11 @@ NinjaAssets is a distributed, eventually-consistent asset management system feat
 | Version Editing | User can edit version number | Flexibility for artists |
 | Scene Versioning | Freeform (not project-tied) | Minimal structure |
 | Categories | Fixed list | Consistency across studio |
+| Remote Repos | One or more, configurable | Aggregate multiple shared libraries in one browser |
+| Remote Backend | Cloud/synced folders (file copy) | No git/object-store dependency; "pull" is a plain copy |
+| Local Repo | Single pull destination | Fast/offline access; Maya can reference local files |
+| Pull on Import | Optional (checkbox) | Artist chooses remote-direct vs. local copy per import |
+| Repo Identity | Unique name + path | `source_repo` keys the library; duplicates are rejected |
 
 ### 1.4 Feature Scope
 
@@ -71,6 +89,10 @@ NinjaAssets is a distributed, eventually-consistent asset management system feat
 | Artist-triggered thumbnail capture | User permissions/roles |
 | Local caching and sync | Dependencies tracking |
 | Maya-only UI | External dashboard applications |
+| Setup tab: local + remote repo config | Per-asset pull/version pinning policies |
+| Multiple remote repos, scanned into one library | Two-way sync of the local repo back to remotes |
+| Repo filter + search across all remotes | Conflict resolution between remotes |
+| Optional pull-to-local on import | Garbage collection of the local repo |
 
 ---
 
@@ -111,17 +133,46 @@ NinjaAssets is a distributed, eventually-consistent asset management system feat
 └─────────┘   └─────────┘   └─────────┘    └─────────┘    └─────────┘    
 ```
 
+> **v1.1 note:** The single Google Drive root above generalizes to **one or more remote repos**.
+> Each remote is an independent cloud/synced folder with the same internal layout
+> (`/assets/<category>/<name>/`, `/.ninjaassets/`). The diagram's "G:\" becomes any number of
+> registered remotes; an existing single `gdrive_root` is treated as the default remote for
+> backward compatibility.
+
+#### 2.1.1 Multi-Remote Topology (v1.1)
+
+```
+   Remote repo "studio"        Remote repo "archive"        ... (N remotes)
+   (cloud/synced folder)       (cloud/synced folder)
+   /assets/...  /.ninjaassets  /assets/...  /.ninjaassets
+        │                            │
+        └──────────────┬─────────────┘
+                       ▼   scan (tags each asset with source_repo)
+              ┌──────────────────────┐
+              │  Local SQLite cache  │  ◄── one library, searchable across all remotes
+              │  (source_repo, ...)  │
+              └──────────┬───────────┘
+                         │  pull-to-local (optional, on import) = file copy
+                         ▼
+              ┌──────────────────────┐
+              │  LOCAL REPO          │  /<category>/<name>/  (Maya imports/refs from here)
+              └──────────────────────┘
+```
+
 ### 2.2 Component Overview
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Sidecar Files (.meta.json) | `G:\assets\*\` | Source of truth for each asset |
-| Scene Meta (.scene_meta.json) | `G:\scenes\*\` | Scene version history |
-| Changelog | `G:\.ninjaassets\changelog.jsonl` | Append-only sync event log |
-| Thumbnails (.thumb.jpg) | `G:\assets\*\` | Artist-captured previews |
-| Local Cache | `%APPDATA%\NinjaAssets\cache.sqlite` | Fast local queries |
-| Sync Engine | Maya Python thread | Background sync coordinator |
-| NinjaAssets UI | Maya PySide2 window | Artist interface |
+| Remote Repos | Registered cloud/synced folders | One or more shared asset libraries to scan |
+| Sidecar Files (.meta.json) | `<remote>\assets\*\` | Source of truth for each asset |
+| Scene Meta (.scene_meta.json) | `<remote>\scenes\*\` | Scene version history |
+| Changelog | `<remote>\.ninjaassets\changelog.jsonl` | Append-only sync event log |
+| Thumbnails (.thumb.jpg) | `<remote>\assets\*\` | Artist-captured previews |
+| Local Repo | User-chosen folder | Pull destination; holds local copies for import/reference |
+| Local Cache | `%APPDATA%\NinjaAssets\cache.sqlite` | Fast local queries; tracks `source_repo` + `local_path` |
+| Cached Thumbnails | `%APPDATA%\NinjaAssets\thumbnails\` | Local copies of remote thumbnails (offline library) |
+| Sync Engine | Maya Python thread | Background sync coordinator (scans every remote) |
+| NinjaAssets UI | Maya PySide2/PySide6 window | Artist interface (Products / Scenefiles / **Setup**) |
 
 ### 2.3 Data Flow Patterns
 
@@ -142,6 +193,20 @@ NinjaAssets is a distributed, eventually-consistent asset management system feat
 - Scene saved with versioned filename (e.g., scene_v003.ma)
 - User can edit version number before saving
 - .scene_meta.json updated with version entry
+
+#### Library Scan Path (v1.1 — multi-remote)
+- Setup tab "Scan Remotes Now" (or Force Sync / first run) runs a full scan
+- Scanner walks `<remote>/assets/<category>/<name>/` for **every** registered remote
+- Each discovered asset is upserted into the cache tagged with its `source_repo`
+- Remote thumbnails are copied into the local thumbnail cache (offline screenshot library)
+- Cache entries absent from **all** remotes are evicted (stale cleanup)
+
+#### Pull-to-Local Path (v1.1)
+- Artist selects an asset and enables "Pull to local" (only when a local repo is configured)
+- On Import/Reference, the version file + sidecar + thumbnail are copied to
+  `<local_repo>/<category>/<name>/` (idempotent: copy only when missing/older)
+- Maya imports/references from the **local copy**; the cache records `local_path`
+- Without pull, import/reference reads directly from the remote path (unchanged v1.0 behavior)
 
 ---
 
@@ -267,7 +332,12 @@ Append-only log for distributed sync. Each line is a JSON event:
 | metadata_changed | uuid, field, value, user | Status or tags modified |
 | scene_saved | path, user, v | New scene version saved |
 
-### 3.4 Local Cache Schema (SQLite)
+### 3.4 Local Cache Schema (SQLite) — Schema v2
+
+> **v1.1:** `SCHEMA_VERSION` is bumped from 1 to **2**, adding `source_repo` and `local_path`.
+> Because the cache is rebuildable, the migration is additive and idempotent: on open, missing
+> columns are added via `ALTER TABLE ... ADD COLUMN` and a rescan repopulates them — no data loss
+> for existing file-backed caches.
 
 ```sql
 -- Main assets table
@@ -290,13 +360,16 @@ CREATE TABLE assets (
     created_by TEXT,
     modified_at TEXT NOT NULL,
     meta_file_mtime REAL,  -- For change detection
-    synced_at TEXT NOT NULL
+    synced_at TEXT NOT NULL,
+    source_repo TEXT,      -- v2: name of the remote repo this asset came from
+    local_path TEXT        -- v2: path to the pulled local copy, if any
 );
 
 CREATE INDEX idx_assets_category ON assets(category);
 CREATE INDEX idx_assets_status ON assets(status);
 CREATE INDEX idx_assets_name ON assets(name);
 CREATE INDEX idx_assets_modified ON assets(modified_at);
+CREATE INDEX idx_assets_source_repo ON assets(source_repo);  -- v2
 
 -- Sync state tracking
 CREATE TABLE sync_state (
@@ -310,6 +383,12 @@ CREATE TABLE preferences (
     value TEXT NOT NULL
 );
 ```
+
+> **Note on identity:** `uuid` remains the primary key. If the *same* asset (same UUID) exists in
+> two remotes — e.g. a pulled duplicate that grew its own sidecar — the rows collide on one entry;
+> the last scanned wins. This is acceptable for v1.1 and is documented as a known limitation.
+> On re-upsert (spot-check/changelog resolver), `source_repo` and `local_path` are **preserved**
+> when the caller does not supply them.
 
 ---
 
@@ -353,7 +432,8 @@ ninja_assets/
 │   │   ├── publish_dialog.py # Publish asset dialog
 │   │   ├── save_version_dialog.py # Save scene version
 │   │   ├── thumbnail_widget.py # Grid of thumbnails
-│   │   ├── preview_panel.py  # Asset detail preview
+│   │   ├── preview_panel.py  # Asset detail preview (+ pull-to-local checkbox)
+│   │   ├── setup_tab.py      # v1.1: local + remote repo config and scan
 │   │   ├── settings_dialog.py # Settings/preferences
 │   │   └── username_dialog.py # First-run username prompt
 │   │
@@ -494,6 +574,44 @@ class NinjaConfig:
 CONFIG = NinjaConfig.load()
 ```
 
+#### 4.2.1 v1.1 Additions — Repos (config.py)
+
+A lightweight `Repo` dataclass plus two `NinjaConfig` fields model the multi-remote + local
+design. Existing single-`gdrive_root` configs keep working via the `remote_repos()` fallback.
+
+```python
+@dataclass
+class Repo:
+    """A remote (cloud/synced) asset repository the tool scans and pulls from."""
+    name: str            # unique, case-insensitive; keys the cache `source_repo`
+    path: Path
+    enabled: bool = True
+
+
+@dataclass
+class NinjaConfig:
+    ...
+    remotes: List[Repo] = field(default_factory=list)   # registered remotes
+    local_repo: Optional[Path] = None                   # pull-to-local destination
+
+    def remote_repos(self) -> List[Repo]:
+        """Enabled remotes; falls back to [Repo('GDrive', gdrive_root)] when none set."""
+        configured = [r for r in self.remotes if r.enabled]
+        return configured or [Repo("GDrive", self.gdrive_root)]
+
+    def assets_root_for(self, repo: Repo) -> Path:
+        return repo.path / "assets"
+
+
+# Duplicate-registration guards (used by the Setup tab):
+def find_remote_by_path(remotes, path) -> Optional[Repo]: ...   # normcase+normpath compare
+def find_remote_by_name(remotes, name) -> Optional[Repo]: ...   # case-insensitive compare
+```
+
+`save()`/`load()` persist `remotes` (as `{name, path, enabled}`) and `local_repo` in
+`config.json`. The Setup tab rejects a remote whose **path** is already registered, and any
+**name** that collides (case-insensitively) with an existing remote.
+
 ### 4.3 Data Models (models.py)
 
 ```python
@@ -578,6 +696,10 @@ class Asset:
     tags: List[str] = field(default_factory=list)
     thumbnail: Optional[str] = None
     bounds: Optional[Bounds] = None
+    # v1.1: cache-only fields, populated by the cache/scanner layer.
+    # Excluded from to_dict()/from_dict() so .meta.json sidecars stay clean.
+    source_repo: Optional[str] = None  # which remote this came from
+    local_path: Optional[str] = None   # path to pulled local copy, if any
     
     @classmethod
     def new(cls, name: str, category: str, path: str) -> 'Asset':
@@ -1066,6 +1188,17 @@ class CacheDB:
         )
 ```
 
+#### 4.5.1 v1.1 Cache Changes
+
+- `SCHEMA_VERSION = 2`; `_init_db()` runs an idempotent migration (adds `source_repo` /
+  `local_path` columns + `idx_assets_source_repo` when missing).
+- `upsert_asset(asset, mtime, source_repo=None)` — writes `source_repo`; **preserves** existing
+  `source_repo`, `local_path`, and `thumbnail_local` across re-upserts (so spot-check / changelog
+  resolver and rescans don't clobber a recorded local pull or origin).
+- `search_assets(..., source_repo=None)` — adds an optional equality filter on `source_repo`.
+- New: `get_repos_with_counts()` (sidebar repo filter), `set_local_path(uuid, path)`,
+  `set_thumbnail_local(uuid, path)`; `_row_to_asset()` populates `source_repo` / `local_path`.
+
 ---
 
 ## 5. Maya Integration
@@ -1427,6 +1560,23 @@ def _get_asset_file_path(asset: Asset, version: Optional[int] = None) -> Path:
     raise ValueError(f"Version {version} not found for asset {asset.name}")
 ```
 
+#### 5.3.1 v1.1 — Pull-to-Local (commands.py)
+
+```python
+def pull_asset(asset: Asset, version: Optional[int], local_root: Union[str, Path]) -> Path:
+    """Copy a version's file + sidecar + thumbnail from the remote folder into
+    local_root/<category>/<name>/. Idempotent (copy only when missing/older).
+    Returns the local file path. Imports no maya modules (pure file ops)."""
+```
+
+`import_asset` and `reference_asset` gain an optional `local_root=` parameter:
+
+- `local_root` **None** (default) → import/reference directly from the remote path (v1.0 behavior).
+- `local_root` set → `pull_asset(...)` first, then import/reference from the **local copy**.
+
+The preview panel passes `config.local_repo` as `local_root` when the "Pull to local" checkbox
+is ticked, and records the resulting path via `cache.set_local_path(uuid, path)`.
+
 ---
 
 ## 6. User Interface Specifications
@@ -1455,46 +1605,48 @@ NinjaAssets (Menu)
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  NinjaAssets                                               [_][□][X]   │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  [Scenefiles]  [Products]                         🔄 Synced: 12s ago   │
+│  [Products]  [Scenefiles]  [Setup]                🔄 Synced: 12s ago   │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   (Tab content changes based on selection - see 6.3 and 6.4)           │
+│   (Tab content changes based on selection - see 6.3, 6.4 and 6.7)      │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **v1.1:** A third **Setup** tab is added (see 6.7). When repos are reconfigured or a scan
+> completes, the Setup tab emits `repos_changed`, which refreshes the Products tab.
 
 ### 6.3 Products Tab (Asset Library)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  [Scenefiles]  [Products]                         🔄 Synced: 12s ago   │
+│  [Products]  [Scenefiles]  [Setup]                🔄 Synced: 12s ago   │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  ┌─────────────────────┐  ┌─────────────────────────────────────────┐   │
-│  │ CATEGORIES          │  │ [🔍 Search...                       ]   │   │
-│  │                     │  │                                         │   │
-│  │ ▸ All         (847) │  │  ┌────────┐ ┌────────┐ ┌────────┐      │   │
-│  │   Characters  (124) │  │  │  IMG   │ │  IMG   │ │  IMG   │      │   │
-│  │   Props       (392) │  │  │        │ │        │ │        │      │   │
-│  │   Environments (89) │  │  │hero_ro │ │laser_r │ │alien_c │      │   │
-│  │   Vehicles     (67) │  │  │ v3  ●  │ │ v1  ○  │ │ v5  ✓  │      │   │
-│  │   Weapons     (112) │  │  └────────┘ └────────┘ └────────┘      │   │
-│  │   FX           (34) │  │  ┌────────┐ ┌────────┐ ┌────────┐      │   │
-│  │   Other        (29) │  │  │  IMG   │ │  IMG   │ │  IMG   │      │   │
-│  │                     │  │  │        │ │        │ │        │      │   │
-│  ├─────────────────────┤  │  │wood_ch │ │metal_b │ │rock_fo │      │   │
-│  │ STATUS              │  │  │ v2  ●  │ │ v1  ○  │ │ v3  ○  │      │   │
-│  │ ○ All               │  │  └────────┘ └────────┘ └────────┘      │   │
-│  │ ○ WIP          (523)│  │                                         │   │
-│  │ ○ Review       (187)│  │                                         │   │
-│  │ ○ Approved     (137)│  │                                         │   │
+│  │ [🔍 Search...     ] │  │  ┌────────┐ ┌────────┐ ┌────────┐      │   │
+│  │                     │  │  │  IMG   │ │  IMG   │ │  IMG   │      │   │
+│  │ CATEGORIES          │  │  │        │ │        │ │        │      │   │
+│  │ ▸ All         (847) │  │  │hero_ro │ │laser_r │ │alien_c │      │   │
+│  │   Characters  (124) │  │  │  v3    │ │  v1    │ │  v5    │      │   │
+│  │   Props       (392) │  │  └────────┘ └────────┘ └────────┘      │   │
+│  │   Environments (89) │  │  ┌────────┐ ┌────────┐ ┌────────┐      │   │
+│  │   Vehicles     (67) │  │  │  IMG   │ │  IMG   │ │  IMG   │      │   │
+│  │   Weapons     (112) │  │  │        │ │        │ │        │      │   │
+│  │   FX           (34) │  │  │wood_ch │ │metal_b │ │rock_fo │      │   │
+│  │   Other        (29) │  │  │  v2    │ │  v1    │ │  v3    │      │   │
+│  │                     │  │  └────────┘ └────────┘ └────────┘      │   │
+│  │ REPOS               │  │                                         │   │
+│  │ ▸ All         (847) │  │                                         │   │
+│  │   studio      (612) │  │                                         │   │
+│  │   archive     (235) │  │                                         │   │
 │  └─────────────────────┘  └─────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐│
 │  │ PREVIEW                                                             ││
 │  │ ┌─────────────┐  hero_robot                                         ││
 │  │ │             │  ─────────────────────────────────────              ││
-│  │ │  THUMBNAIL  │  Category: Characters     Status: ● Review          ││
+│  │ │  THUMBNAIL  │  Category: Characters     Repo: studio  (local)     ││
 │  │ │             │  Author: mike.chen        Polys: 45,000             ││
 │  │ │             │  Modified: Jan 17, 2025   Size: 2.5 x 4.0 x 1.5     ││
 │  │ └─────────────┘  Tags: robot, hero, mechanical                      ││
@@ -1502,9 +1654,9 @@ NinjaAssets (Menu)
 │  │  Version: [v3 ▼]  Comment: "Fixed topology issues"                  ││
 │  │                                                                     ││
 │  │  [📥 Import]  [🔗 Reference]  [📂 Open Folder]  [📋 Copy Path]      ││
+│  │  ☐ Pull to local before import   (enabled when a local repo is set) ││
 │  └─────────────────────────────────────────────────────────────────────┘│
 │                                                                         │
-│  Status Legend:  ○ = WIP    ● = Review    ✓ = Approved                 │
 └─────────────────────────────────────────────────────────────────────────┘
 
 Interactions:
@@ -1512,6 +1664,13 @@ Interactions:
   • Double-click thumbnail → Import asset (latest version)
   • Right-click thumbnail  → Context menu (Import, Reference, Copy Path...)
   • Click version dropdown → Select specific version to import
+  • REPOS filter (v1.1)    → Show assets from one remote, or All; counts per repo
+  • Pull-to-local (v1.1)   → When ticked, Import/Reference copy to the local repo first
+
+Note (v1.1): The asset workflow STATUS (wip/review/approved) is no longer surfaced in the
+browser — the sidebar status filter, per-card status badge, and preview status line were
+removed. The `status` field remains in the data model / sidecar and Publish dialog; the
+cache still supports filtering by it programmatically.
 ```
 
 ### 6.4 Scenefiles Tab (Scene Versioning)
@@ -1637,6 +1796,45 @@ Notes:
   • Thumbnail: captured from viewport by artist (not auto-generated)
 ```
 
+### 6.7 Setup Tab (v1.1 — Repos & Library)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  [Products]  [Scenefiles]  [Setup]                🔄 Synced: 12s ago   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─ Local Repo ────────────────────────────────────────────────────────┐│
+│  │  Local repo:  [ D:\NinjaLocal                          ] [ Browse… ] ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─ Remote Repos ──────────────────────────────────────────────────────┐│
+│  │  Cloud/synced folders to scan for assets:                           ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐││
+│  │  │ studio  — G:\Shared drives\Studio\NinjaAssets                    │││
+│  │  │ archive — \\nas\library\ninja_archive                           │││
+│  │  └─────────────────────────────────────────────────────────────────┘││
+│  │  [ Add… ]  [ Rename… ]  [ Remove ]                                   ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                         │
+│  ┌─ Library ───────────────────────────────────────────────────────────┐│
+│  │  [ Scan Remotes Now ]    [████████████ scanning… ]                   ││
+│  │  Scan complete — 847 asset(s) updated.                               ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                                                                [ Save ]   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Behavior:
+  • Local repo: directory picker (QFileDialog.getExistingDirectory). Created on Save.
+  • Add remote: pick a folder, then name it (default = folder name).
+      - Rejects a folder already registered (path compared via normcase+normpath).
+      - Rejects a name that collides case-insensitively with an existing remote.
+  • Rename: blocks renaming to a name already used by another remote.
+  • Scan Remotes Now: runs a full scan off the UI thread (QThreadPool/QRunnable);
+      indeterminate progress bar; on finish shows count and emits repos_changed.
+  • Save: persists local_repo + remotes to config.json; emits repos_changed.
+  • repos_changed → main window refreshes the Products tab.
+```
+
 ---
 
 ## 7. Sync Engine
@@ -1689,10 +1887,16 @@ Notes:
              │
              ▼
     ┌──────────────────┐
-    │ 4. FULL RESCAN   │  ◄── Only on demand (Force Sync menu)
-    │    (~30-60 sec)  │      Or first run on fresh workstation
+    │ 4. FULL RESCAN   │  ◄── Force Sync menu, Setup-tab "Scan Remotes Now",
+    │    (~30-60 sec)  │      or first run on fresh workstation
     └──────────────────┘
 ```
+
+> **v1.1:** A full rescan iterates **every** registered remote
+> (`config.remote_repos()`), tagging each upserted asset with its `source_repo` and caching
+> remote thumbnails locally. `found_uuids` is accumulated across all remotes, then a single
+> stale-cleanup evicts cache entries absent from every remote. `spot_check` is unchanged
+> (asset paths are absolute), and re-upserts preserve `source_repo` / `local_path`.
 
 ### 7.2 Conflict Resolution
 
@@ -1773,7 +1977,11 @@ cmds.evalDeferred(init_ninja_assets)
 - GDrive folder structure is created automatically
 - Menu and shelf buttons appear
 
-### 8.3 GDrive Folder Structure (Auto-Created)
+> **v1.1 first launch:** After the username prompt, open the **Setup** tab to register a
+> local repo and one or more remote repos, then click **Scan Remotes Now**. The structure
+> below is created for the default remote and applies to each registered remote.
+
+### 8.3 Remote Repo Folder Structure (Auto-Created, per remote)
 
 ```
 G:\
@@ -1796,10 +2004,13 @@ G:\
 
 ```
 %APPDATA%\NinjaAssets\
-├── config.json              # User preferences
-├── cache.sqlite             # Local asset cache
-├── thumbnails/              # Cached thumbnails
+├── config.json              # User prefs + remotes[] + local_repo
+├── cache.sqlite             # Local asset cache (schema v2)
+├── thumbnails/              # Cached remote thumbnails (offline library)
 └── logs/                    # Debug logs
+
+<local_repo>\                # v1.1: user-chosen pull destination (Setup tab)
+└── <category>\<name>\       # local copies of pulled assets (file + sidecar + thumb)
 ```
 
 ---
@@ -2086,6 +2297,12 @@ Scenes (freeform structure):
     <scene_name>_v001.ma
     <scene_name>_v002.ma
     .scene_meta.json
+
+Local repo (v1.1 — pulled copies mirror the remote layout):
+  <local_repo>\<category>\<asset_name>\
+    <asset_name>_v003.obj      ← the pulled version file
+    <asset_name>.meta.json     ← copied sidecar
+    <asset_name>.thumb.jpg     ← copied thumbnail
 ```
 
 ### E. Error Codes

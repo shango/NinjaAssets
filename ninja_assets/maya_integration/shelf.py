@@ -5,8 +5,14 @@ SHELF_BUTTON_NAME = "NinjaAssetsShelfBtn"
 
 def add_shelf_buttons():
     """Add NinjaAssets button to the current shelf."""
+    import os
     import maya.cmds as cmds
     import maya.mel as mel
+    from ninja_assets import resource_path
+
+    icon = resource_path("ninja_icon.png")
+    if not os.path.exists(icon):
+        icon = "fileOpen.png"  # fall back to a built-in Maya icon
 
     # Get the currently active shelf
     top_shelf = mel.eval("$tmpVar=$gShelfTopLevel")
@@ -34,10 +40,10 @@ def add_shelf_buttons():
         parent=current_shelf,
         label="NinjaAssets",
         annotation="Open NinjaAssets Browser (Alt+Shift+A)",
-        image1="fileOpen.png",
+        image1=icon,
         command=(
             "from ninja_assets.maya_integration import plugin; "
-            "plugin.show_browser()"
+            "plugin.launch()"
         ),
         sourceType="python"
     )

@@ -1,154 +1,143 @@
-"""Products tab - browse, search, filter, and preview assets."""
+"""Products tab - browse, search, filter, and preview assets.
+
+Layout: a top filter bar (Category + Repo dropdowns, both carrying live counts,
+plus a search box and a Refresh button) over a horizontal splitter with the
+thumbnail grid on the left and the detail panel on the right.
+"""
 
 import logging
-from typing import List, Optional, Set
+from typing import Set
 
 from ninja_assets.maya_integration.ui.qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QTreeWidget, QTreeWidgetItem, QLabel, QLineEdit,
-    QRadioButton, QButtonGroup, QGroupBox, QFrame,
-    Qt, QTimer, QSizePolicy,
+    QComboBox, QLabel, QLineEdit, QPushButton,
+    Qt, QTimer,
 )
 from ninja_assets.maya_integration.ui.thumbnail_widget import ThumbnailGrid
 from ninja_assets.maya_integration.ui.preview_panel import PreviewPanel
-from ninja_assets.core.models import Asset, AssetStatus
 
 logger = logging.getLogger(__name__)
 
+_ALL_CATEGORIES = "All categories"
+_ALL_REPOS = "All repos"
+
 
 class ProductsTab(QWidget):
-    """Main products browsing tab with sidebar filters, grid, and preview."""
+    """Main products browsing tab: filter bar + grid + detail panel."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._assets = []       # current filtered list
-        self._all_assets = []   # all assets from cache
+        self._all_assets = []   # everything loaded from the cache
         self._asset_map = {}    # uuid -> Asset
         self._build_ui()
         self._setup_connections()
 
     def _build_ui(self):
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(8)
 
-        # --- Left Sidebar ---
-        sidebar = QWidget()
-        sidebar.setFixedWidth(220)
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(6, 6, 6, 6)
+        # --- top filter bar -------------------------------------------------
+        top = QHBoxLayout()
+        top.setSpacing(6)
 
-        # Categories section
-        cat_group = QGroupBox("CATEGORIES")
-        cat_layout = QVBoxLayout(cat_group)
-        self._cat_tree = QTreeWidget()
-        self._cat_tree.setHeaderHidden(True)
-        self._cat_tree.setRootIsDecorated(False)
-        self._cat_tree.setToolTip("Filter assets by category")
-        cat_layout.addWidget(self._cat_tree)
-        sidebar_layout.addWidget(cat_group)
-
-        # Status section
-        status_group = QGroupBox("STATUS")
-        status_layout = QVBoxLayout(status_group)
-        self._status_group = QButtonGroup(self)
-        self._status_radios = {}
-
-        status_tips = {
-            None: "Show all assets regardless of status",
-            "wip": "Work in progress — still being worked on",
-            "review": "Ready for review and feedback",
-            "approved": "Approved for use in production",
-        }
-        for label_text, value in [("All", None), ("WIP", "wip"),
-                                  ("Review", "review"), ("Approved", "approved")]:
-            radio = QRadioButton(label_text)
-            radio.setToolTip(status_tips[value])
-            self._status_group.addButton(radio)
-            self._status_radios[value] = radio
-            status_layout.addWidget(radio)
-
-        self._status_radios[None].setChecked(True)
-        sidebar_layout.addWidget(status_group)
-        sidebar_layout.addStretch()
-
-        main_layout.addWidget(sidebar)
-
-        # --- Center + Bottom (splitter) ---
-        right_splitter = QSplitter(Qt.Vertical)
-
-        # Center: search + grid
-        center_widget = QWidget()
-        center_layout = QVBoxLayout(center_widget)
-        center_layout.setContentsMargins(4, 4, 4, 0)
+        self._cat_combo = QComboBox()
+        self._cat_combo.setToolTip("Filter assets by category")
+        self._cat_combo.setMinimumWidth(150)
+        self._repo_combo = QComboBox()
+        self._repo_combo.setToolTip("Filter assets by the remote repo they came from")
+        self._repo_combo.setMinimumWidth(150)
 
         self._search_edit = QLineEdit()
-        self._search_edit.setPlaceholderText("Search assets...")
+        self._search_edit.setPlaceholderText("Search assets…")
+        self._search_edit.setClearButtonEnabled(True)
         self._search_edit.setToolTip("Type to filter assets by name")
-        center_layout.addWidget(self._search_edit)
 
-        self._grid = ThumbnailGrid(thumb_size=100)
-        center_layout.addWidget(self._grid)
+        self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setToolTip("Reload the library from the local cache")
 
-        right_splitter.addWidget(center_widget)
+        top.addWidget(QLabel("Category:"))
+        top.addWidget(self._cat_combo)
+        top.addWidget(QLabel("Repo:"))
+        top.addWidget(self._repo_combo)
+        top.addWidget(self._search_edit, 1)
+        top.addWidget(self._refresh_btn)
+        outer.addLayout(top)
 
-        # Bottom: preview panel
-        self._preview = PreviewPanel(preview_size=250)
-        right_splitter.addWidget(self._preview)
+        # --- splitter: grid | detail ---------------------------------------
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(3)
 
-        right_splitter.setStretchFactor(0, 3)
-        right_splitter.setStretchFactor(1, 1)
+        grid_size = self._get_config_value("grid_thumbnail_size", 128)
+        self._grid = ThumbnailGrid(thumb_size=grid_size)
+        splitter.addWidget(self._grid)
 
-        main_layout.addWidget(right_splitter, stretch=1)
+        preview_size = self._get_config_value("preview_thumbnail_size", 320)
+        self._preview = PreviewPanel(preview_size=preview_size)
+        splitter.addWidget(self._preview)
 
-        # Debounce timer for search
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        outer.addWidget(splitter, 1)
+
+        # --- status line ----------------------------------------------------
+        self._status = QLabel("")
+        self._status.setObjectName("muted")
+        outer.addWidget(self._status)
+
+        # Debounce timer for search-as-you-type.
         self._search_timer = QTimer()
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(300)
 
     def _setup_connections(self):
-        self._cat_tree.currentItemChanged.connect(self._on_filter_changed)
-        self._status_group.buttonClicked.connect(self._on_filter_changed)
-        self._search_edit.textChanged.connect(self._on_search_text_changed)
-        self._search_timer.timeout.connect(self._on_filter_changed)
+        self._cat_combo.currentIndexChanged.connect(self._apply_filters)
+        self._repo_combo.currentIndexChanged.connect(self._apply_filters)
+        self._search_edit.textChanged.connect(lambda _t: self._search_timer.start())
+        self._search_timer.timeout.connect(self._apply_filters)
+        self._refresh_btn.clicked.connect(self.refresh)
         self._grid.asset_selected.connect(self._on_asset_selected)
         self._grid.asset_double_clicked.connect(self._on_asset_double_clicked)
 
     # --- Public API ---
 
     def refresh(self):
-        """Re-query cache and update the grid with current filters."""
+        """Re-query the cache, rebuild filter combos, and repopulate the grid."""
         cache = self._get_cache()
         if cache is None:
             self._all_assets = []
             self._asset_map = {}
             self._grid.clear()
             self._preview.clear()
+            self._status.setText("Library not available.")
             return
 
-        # Pass current filters to the DB query for efficiency
-        category = self._get_selected_category()
-        status = self._get_selected_status()
-        query = self._search_edit.text().strip().lower()
-
-        self._all_assets = cache.search_assets(
-            query=query,
-            category=category,
-            status=status,
-            limit=10000,
-        )
+        self._all_assets = cache.search_assets(query="", limit=100000)
         self._asset_map = {a.uuid: a for a in self._all_assets}
 
-        self._update_category_tree()
-        self._update_status_counts()
+        self._rebuild_combo(self._cat_combo, _ALL_CATEGORIES,
+                            cache.get_categories_with_counts())
+        self._rebuild_combo(self._repo_combo, _ALL_REPOS,
+                            cache.get_repos_with_counts())
         self._apply_filters()
 
     def on_assets_changed(self, changed_uuids: Set[str]):
-        """Called when sync engine reports changes. Refresh if any visible."""
-        visible_uuids = set(self._asset_map.keys())
-        if changed_uuids & visible_uuids:
+        """Called when the sync engine reports changes. Refresh if any visible."""
+        if changed_uuids & set(self._asset_map.keys()):
             self.refresh()
 
     # --- Internal ---
+
+    def _get_config_value(self, attr, default):
+        try:
+            from ninja_assets.maya_integration import plugin
+            config = plugin.get_config()
+            if config:
+                return getattr(config, attr, default)
+        except Exception:
+            pass
+        return default
 
     def _get_cache(self):
         try:
@@ -157,79 +146,45 @@ class ProductsTab(QWidget):
         except Exception:
             return None
 
-    def _update_category_tree(self):
-        """Rebuild category tree with counts."""
-        cache = self._get_cache()
-        counts = cache.get_categories_with_counts() if cache else {}
+    @staticmethod
+    def _rebuild_combo(combo, all_label, counts):
+        """Repopulate a filter combo as 'All (N)' + 'Name (count)' entries.
+
+        The real filter value is stored in itemData (None for the 'All' row);
+        the visible text carries the count. The prior selection is preserved
+        when that value still exists after a rescan.
+        """
+        previous = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
         total = sum(counts.values())
+        combo.addItem("{} ({})".format(all_label, total), None)
+        for name in sorted(counts):
+            combo.addItem("{} ({})".format(name, counts[name]), name)
+        # Restore the previous selection if it survived the rescan.
+        idx = combo.findData(previous) if previous is not None else 0
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
 
-        self._cat_tree.blockSignals(True)
-        current_cat = self._get_selected_category()
-        self._cat_tree.clear()
-
-        all_item = QTreeWidgetItem(["All ({})".format(total)])
-        all_item.setData(0, Qt.UserRole, None)
-        self._cat_tree.addTopLevelItem(all_item)
-
-        for cat in sorted(counts.keys()):
-            item = QTreeWidgetItem(["{} ({})".format(cat, counts[cat])])
-            item.setData(0, Qt.UserRole, cat)
-            self._cat_tree.addTopLevelItem(item)
-            if cat == current_cat:
-                self._cat_tree.setCurrentItem(item)
-
-        if not self._cat_tree.currentItem():
-            self._cat_tree.setCurrentItem(all_item)
-
-        self._cat_tree.blockSignals(False)
-
-    def _update_status_counts(self):
-        """Update radio button labels with counts."""
-        counts = {"wip": 0, "review": 0, "approved": 0}
-        for a in self._all_assets:
-            counts[a.status.value] = counts.get(a.status.value, 0) + 1
-        total = len(self._all_assets)
-
-        self._status_radios[None].setText(f"All ({total})")
-        self._status_radios["wip"].setText(f"WIP ({counts['wip']})")
-        self._status_radios["review"].setText(f"Review ({counts['review']})")
-        self._status_radios["approved"].setText(f"Approved ({counts['approved']})")
-
-    def _get_selected_category(self) -> Optional[str]:
-        item = self._cat_tree.currentItem()
-        if item:
-            return item.data(0, Qt.UserRole)
-        return None
-
-    def _get_selected_status(self) -> Optional[str]:
-        for value, radio in self._status_radios.items():
-            if radio.isChecked():
-                return value
-        return None
-
-    def _apply_filters(self):
-        """Filter all_assets by current category, status, and search text."""
-        category = self._get_selected_category()
-        status = self._get_selected_status()
+    def _apply_filters(self, *args):
+        """Filter the loaded assets by category, repo, and search text."""
+        category = self._cat_combo.currentData()
+        source_repo = self._repo_combo.currentData()
         query = self._search_edit.text().strip().lower()
 
         filtered = self._all_assets
-
         if category:
             filtered = [a for a in filtered if a.category == category]
-        if status:
-            filtered = [a for a in filtered if a.status.value == status]
+        if source_repo:
+            filtered = [a for a in filtered if a.source_repo == source_repo]
         if query:
             filtered = [a for a in filtered if query in a.name.lower()]
 
         self._assets = filtered
         self._grid.set_assets(filtered)
-
-    def _on_filter_changed(self, *args):
-        self._apply_filters()
-
-    def _on_search_text_changed(self, text):
-        self._search_timer.start()
+        self._status.setText(
+            "Showing {}/{} assets".format(len(filtered), len(self._all_assets))
+        )
 
     def _on_asset_selected(self, uuid):
         asset = self._asset_map.get(uuid)

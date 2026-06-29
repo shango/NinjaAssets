@@ -36,3 +36,4 @@ Thumbs.db
 # Project-specific
 *.sqlite
 *.sqlite3
+ninja_assets/_build_stamp.txt

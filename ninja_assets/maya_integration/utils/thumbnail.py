@@ -1,5 +1,4 @@
 """Viewport thumbnail capture"""
-import os
 import tempfile
 from pathlib import Path
 from typing import Optional

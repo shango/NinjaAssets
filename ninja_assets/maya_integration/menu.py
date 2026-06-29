@@ -77,6 +77,13 @@ def create_menu():
         annotation="Force a full resync of the asset database",
     )
 
+    # Reload / Apply Update
+    cmds.menuItem(
+        label="Reload / Apply Update",
+        command=lambda _: _reload_plugin(),
+        annotation="Reload NinjaAssets from disk (applies an update without restarting Maya)",
+    )
+
     # Settings
     cmds.menuItem(
         label="Settings...",
@@ -88,6 +95,15 @@ def create_menu():
 def _show_browser():
     from ninja_assets.maya_integration import plugin
     plugin.show_browser()
+
+
+def _reload_plugin():
+    import maya.cmds as cmds
+    from ninja_assets.maya_integration import reload as _reload
+    _reload.hot_reload()
+    cmds.inViewMessage(
+        amg="<hl>NinjaAssets:</hl> Reloaded", pos="topCenter", fade=True
+    )
 
 
 

@@ -2,16 +2,15 @@
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from ninja_assets.maya_integration.ui.qt_compat import (
-    QFrame, QLabel, QVBoxLayout, QScrollArea, QWidget, QSizePolicy,
-    QPixmap, QImage, QFont, QColor, Qt, Signal, QObject, QSize,
-    QRunnable, QThreadPool, QMenu, QCursor, QApplication,
+    QFrame, QLabel, QVBoxLayout, QScrollArea, QWidget,
+    QPixmap, QImage, QFont, Qt, Signal, QObject,
+    QRunnable, QThreadPool, QMenu, QCursor,
 )
 from ninja_assets.maya_integration.ui.flow_layout import FlowLayout
-from ninja_assets.maya_integration.ui import STATUS_DISPLAY
-from ninja_assets.core.models import Asset, AssetStatus
+from ninja_assets.core.models import Asset
 
 logger = logging.getLogger(__name__)
 
@@ -46,54 +45,56 @@ class ThumbnailCard(QFrame):
     asset_selected = Signal(str)
     asset_double_clicked = Signal(str)
 
-    def __init__(self, asset, thumb_size=100, parent=None):
+    # Scale name character limit with card width
+    _CHARS_PER_PX = 0.14  # ~18 chars at 128px
+
+    def __init__(self, asset, thumb_size=128, parent=None):
         super().__init__(parent)
         self.asset = asset
         self._thumb_size = thumb_size
         self._selected = False
 
-        self.setFixedSize(thumb_size + 10, thumb_size + 40)
-        self.setFrameShape(QFrame.Box)
-        self.setLineWidth(1)
+        card_w = thumb_size + 8
+        card_h = thumb_size + 42
+        self.setFixedSize(card_w, card_h)
+        self.setFrameShape(QFrame.NoFrame)
         self.setCursor(Qt.PointingHandCursor)
-        self._update_border()
+        self.setProperty("selected", False)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 2)
-        layout.setSpacing(1)
+        layout.setContentsMargins(3, 3, 3, 2)
+        layout.setSpacing(2)
 
         # Thumbnail image
         self.image_label = QLabel()
+        self.image_label.setObjectName("cardThumb")
         self.image_label.setFixedSize(thumb_size, thumb_size)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("background-color: #3a3a3a;")
         self.image_label.setText("?")
         layout.addWidget(self.image_label, alignment=Qt.AlignCenter)
 
-        # Name label
-        name_label = QLabel(self._truncate(asset.name, 14))
+        # Breathing room between the thumbnail and its name
+        layout.addSpacing(6)
+
+        # Name label — scale max chars with thumbnail size
+        max_chars = max(10, int(thumb_size * self._CHARS_PER_PX))
+        name_label = QLabel(self._truncate(asset.name, max_chars))
+        name_label.setObjectName("cardName")
         name_label.setAlignment(Qt.AlignCenter)
-        small_font = QFont()
-        small_font.setPointSize(8)
-        name_label.setFont(small_font)
+        name_font = QFont()
+        name_font.setPointSize(8)
+        name_label.setFont(name_font)
         name_label.setToolTip(asset.name)
         layout.addWidget(name_label)
 
-        # Version + status
-        status_info = STATUS_DISPLAY.get(asset.status)
-        if status_info:
-            indicator_text = f"{status_info['symbol']} {status_info['text']}"
-            indicator_color = status_info["color"]
-        else:
-            indicator_text = "\u25cf ?"
-            indicator_color = "#999999"
-        status_label = QLabel(f"v{asset.current_version}  {indicator_text}")
-        status_label.setAlignment(Qt.AlignCenter)
-        tiny_font = QFont()
-        tiny_font.setPointSize(7)
-        status_label.setFont(tiny_font)
-        status_label.setStyleSheet(f"color: {indicator_color};")
-        layout.addWidget(status_label)
+        # Version — compact single line
+        version_label = QLabel(f"v{asset.current_version}")
+        version_label.setObjectName("cardVersion")
+        version_label.setAlignment(Qt.AlignCenter)
+        version_font = QFont()
+        version_font.setPointSize(7)
+        version_label.setFont(version_font)
+        layout.addWidget(version_label)
 
     def set_pixmap(self, pixmap):
         """Set the thumbnail pixmap."""
@@ -105,14 +106,12 @@ class ThumbnailCard(QFrame):
         self.image_label.setText("")
 
     def set_selected(self, selected):
+        """Toggle selection via a dynamic property; the stylesheet does the rest."""
         self._selected = selected
-        self._update_border()
-
-    def _update_border(self):
-        if self._selected:
-            self.setStyleSheet("ThumbnailCard { border: 2px solid #3daee9; }")
-        else:
-            self.setStyleSheet("ThumbnailCard { border: 1px solid #555; }")
+        self.setProperty("selected", selected)
+        # Re-polish so the property-based QSS rule re-evaluates.
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -177,7 +176,7 @@ class ThumbnailGrid(QScrollArea):
     asset_selected = Signal(str)
     asset_double_clicked = Signal(str)
 
-    def __init__(self, thumb_size=100, parent=None):
+    def __init__(self, thumb_size=128, parent=None):
         super().__init__(parent)
         self._thumb_size = thumb_size
         self._cards = {}  # uuid -> ThumbnailCard
@@ -185,9 +184,10 @@ class ThumbnailGrid(QScrollArea):
 
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFrameShape(QFrame.NoFrame)
 
         self._container = QWidget()
-        self._flow = FlowLayout(self._container, margin=8, h_spacing=6, v_spacing=6)
+        self._flow = FlowLayout(self._container, margin=6, h_spacing=4, v_spacing=4)
         self._container.setLayout(self._flow)
         self.setWidget(self._container)
 

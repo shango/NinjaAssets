@@ -16,9 +16,10 @@ try:
         QApplication, QMainWindow, QWidget, QDialog,
         QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
         QTabWidget, QSplitter, QGroupBox, QFrame,
-        QPushButton, QLabel, QLineEdit, QTextEdit, QSpinBox,
+        QPushButton, QToolButton, QLabel, QLineEdit, QTextEdit, QSpinBox,
         QComboBox, QCheckBox, QRadioButton, QButtonGroup,
         QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem,
+        QListWidget, QListWidgetItem, QProgressBar,
         QHeaderView, QAbstractItemView,
         QScrollArea, QSizePolicy, QSpacerItem,
         QMenu, QToolBar, QStatusBar,
@@ -34,7 +35,7 @@ try:
     )
     from PySide6.QtGui import (  # noqa: F401
         QAction,
-        QPixmap, QImage, QIcon, QFont, QColor, QPalette,
+        QPixmap, QImage, QIcon, QFont, QFontMetrics, QColor, QPalette,
         QCursor, QPainter, QBrush, QPen,
         QKeySequence, QShortcut,
         QDesktopServices,
@@ -52,9 +53,10 @@ except ImportError as _e6:
             QApplication, QMainWindow, QWidget, QDialog,
             QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
             QTabWidget, QSplitter, QGroupBox, QFrame,
-            QPushButton, QLabel, QLineEdit, QTextEdit, QSpinBox,
+            QPushButton, QToolButton, QLabel, QLineEdit, QTextEdit, QSpinBox,
             QComboBox, QCheckBox, QRadioButton, QButtonGroup,
             QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem,
+            QListWidget, QListWidgetItem, QProgressBar,
             QHeaderView, QAbstractItemView,
             QScrollArea, QSizePolicy, QSpacerItem,
             QMenu, QAction, QToolBar, QStatusBar,
@@ -70,7 +72,7 @@ except ImportError as _e6:
             QMimeData, QEvent,
         )
         from PySide2.QtGui import (  # noqa: F401
-            QPixmap, QImage, QIcon, QFont, QColor, QPalette,
+            QPixmap, QImage, QIcon, QFont, QFontMetrics, QColor, QPalette,
             QCursor, QPainter, QBrush, QPen,
             QKeySequence,
             QDesktopServices,

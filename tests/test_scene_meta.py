@@ -1,6 +1,5 @@
 """Tests for SceneMetaManager."""
 
-import pytest
 
 from ninja_assets.core.scene_meta import SceneMetaManager
 

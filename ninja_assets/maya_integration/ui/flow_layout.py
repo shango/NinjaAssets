@@ -5,7 +5,7 @@ exceed the available width.
 """
 
 from ninja_assets.maya_integration.ui.qt_compat import (
-    QLayout, QLayoutItem, QRect, QSize, QSizePolicy, Qt, QPoint,
+    QLayout, QRect, QSize, Qt, QPoint,
 )
 
 

@@ -89,6 +89,11 @@ class Asset:
     tags: List[str] = field(default_factory=list)
     thumbnail: Optional[str] = None
     bounds: Optional[Bounds] = None
+    # Cache-only fields (not persisted to the .meta.json sidecar). Populated by
+    # the cache/scanner layer to track which remote an asset came from and
+    # whether it has been pulled to the local repo.
+    source_repo: Optional[str] = None
+    local_path: Optional[str] = None
 
     @classmethod
     def new(cls, name: str, category: str, path: str) -> "Asset":
@@ -202,7 +207,7 @@ class ChangelogEvent:
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def to_json_line(self) -> str:
-        data = {
+        data: Dict[str, Any] = {
             "ts": self.timestamp.isoformat() + "Z",
             "type": self.event_type.value,
             "uuid": self.uuid,

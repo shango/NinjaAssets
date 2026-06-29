@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-import pytest
 
 from ninja_assets.core.changelog import ChangelogManager
 from ninja_assets.core.models import ChangelogEvent, EventType

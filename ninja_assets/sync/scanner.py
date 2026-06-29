@@ -3,10 +3,11 @@
 import logging
 import os
 import random
+import shutil
 from pathlib import Path
 from typing import List
 
-from ninja_assets.config import NinjaConfig
+from ninja_assets.config import NinjaConfig, Repo
 from ninja_assets.constants import SIDECAR_SUFFIX
 from ninja_assets.core.cache import CacheDB
 from ninja_assets.core.exceptions import SidecarError
@@ -23,36 +24,26 @@ class AssetScanner:
         self.cache = cache
 
     def full_scan(self) -> List[str]:
-        """Walk all category folders under config.assets_root using os.scandir().
+        """Scan every configured remote repo and sync metadata into the cache.
 
-        For each subfolder, look for .meta.json sidecar files.
-        Read each sidecar via SidecarManager.read().
-        Upsert into cache via cache.upsert_asset().
-        Remove any UUIDs from cache that no longer exist on disk.
-        Returns list of changed UUIDs.
+        For each remote (config.remote_repos()), recursively walk its assets
+        tree, read .meta.json sidecars found at any depth, and upsert into the
+        cache tagged with the remote's name (source_repo). Found UUIDs are
+        accumulated across all remotes; afterwards any cached UUID not found in
+        any remote is evicted. Returns list of changed UUIDs.
+
+        Assets are identified by the UUID in their sidecar, not by path, so a
+        moved or renamed folder is absorbed cheaply: the asset is rediscovered
+        by the tree walk and only its cached path is refreshed (no re-upsert,
+        no thumbnail re-copy). This is also the authoritative deletion pass.
         """
         changed: List[str] = []
         found_uuids: set = set()
-        assets_root = self.config.assets_root
 
-        if not assets_root.exists():
-            logger.warning("Assets root does not exist: %s", assets_root)
-            return changed
+        for repo in self.config.remote_repos():
+            self._scan_repo(repo, changed, found_uuids)
 
-        # Walk category folders
-        try:
-            with os.scandir(assets_root) as cat_entries:
-                for cat_entry in cat_entries:
-                    if not cat_entry.is_dir():
-                        continue
-                    self._scan_category(
-                        Path(cat_entry.path), changed, found_uuids
-                    )
-        except OSError as exc:
-            logger.warning("Error scanning assets root %s: %s", assets_root, exc)
-            return changed
-
-        # Remove stale entries from cache
+        # Remove stale entries from cache (absent from every remote)
         cached_uuids = set(self.cache.get_all_uuids())
         stale_uuids = cached_uuids - found_uuids
         for uuid in stale_uuids:
@@ -62,46 +53,62 @@ class AssetScanner:
 
         return changed
 
-    def _scan_category(
-        self, category_path: Path, changed: List[str], found_uuids: set
+    def _scan_repo(
+        self, repo: Repo, changed: List[str], found_uuids: set
     ) -> None:
-        """Scan a single category folder for asset subfolders with sidecars."""
-        try:
-            with os.scandir(category_path) as entries:
-                for entry in entries:
-                    if not entry.is_dir():
-                        continue
-                    self._scan_asset_folder(
-                        Path(entry.path), changed, found_uuids
-                    )
-        except OSError as exc:
+        """Recursively scan the assets tree of a single remote repo."""
+        assets_root = self.config.assets_root_for(repo)
+        if not assets_root.exists():
             logger.warning(
-                "Error scanning category folder %s: %s", category_path, exc
+                "Assets root for repo %r does not exist: %s", repo.name, assets_root
             )
+            return
 
-    def _scan_asset_folder(
-        self, folder_path: Path, changed: List[str], found_uuids: set
+        self._scan_tree(assets_root, changed, found_uuids, repo.name)
+
+    def _scan_tree(
+        self,
+        path: Path,
+        changed: List[str],
+        found_uuids: set,
+        source_repo: str,
     ) -> None:
-        """Scan an asset folder for sidecar files."""
+        """Recursively walk a folder, processing every sidecar at any depth.
+
+        Asset folders may be nested arbitrarily deep within a category (e.g.
+        assets/Props/Weapons/Swords/excalibur/). Symlinked directories are not
+        followed, to avoid cycles during recursion.
+        """
         try:
-            with os.scandir(folder_path) as entries:
+            with os.scandir(path) as entries:
                 for entry in entries:
-                    if not entry.is_file():
-                        continue
-                    if not entry.name.endswith(SIDECAR_SUFFIX):
-                        continue
-                    self._process_sidecar(
-                        Path(entry.path), changed, found_uuids
-                    )
+                    if entry.is_dir(follow_symlinks=False):
+                        self._scan_tree(
+                            Path(entry.path), changed, found_uuids, source_repo
+                        )
+                    elif entry.is_file() and entry.name.endswith(SIDECAR_SUFFIX):
+                        self._process_sidecar(
+                            Path(entry.path), changed, found_uuids, source_repo
+                        )
         except OSError as exc:
-            logger.warning(
-                "Error scanning asset folder %s: %s", folder_path, exc
-            )
+            logger.warning("Error scanning folder %s: %s", path, exc)
 
     def _process_sidecar(
-        self, sidecar_path: Path, changed: List[str], found_uuids: set
+        self,
+        sidecar_path: Path,
+        changed: List[str],
+        found_uuids: set,
+        source_repo: str,
     ) -> None:
-        """Read a sidecar and upsert into cache if changed."""
+        """Read a sidecar and sync it into the cache.
+
+        The folder we found the sidecar in is the source of truth for the
+        asset's location. Moving or renaming a folder leaves the sidecar's
+        mtime untouched and may leave the path recorded inside the JSON stale,
+        so we trust the discovery location. When *only* the location changed
+        (same mtime, different path), we refresh the cached path cheaply
+        instead of re-upserting and re-copying the thumbnail.
+        """
         try:
             asset, mtime = SidecarManager.read(sidecar_path)
         except SidecarError as exc:
@@ -109,14 +116,47 @@ class AssetScanner:
             return
 
         found_uuids.add(asset.uuid)
+        asset.path = str(sidecar_path.parent)
 
-        # Check if cache already has this asset with the same mtime
-        cached_mtime = self.cache.get_asset_mtime(asset.uuid)
-        if cached_mtime is not None and cached_mtime == mtime:
-            return  # No change
+        state = self.cache.get_meta_state(asset.uuid)
+        if state is not None and state[0] == mtime:
+            # Content unchanged. Absorb a move by refreshing only the path.
+            if state[1] != asset.path:
+                logger.info(
+                    "Asset %s moved, updating path: %s -> %s",
+                    asset.uuid,
+                    state[1],
+                    asset.path,
+                )
+                self.cache.set_path(asset.uuid, asset.path)
+                changed.append(asset.uuid)
+            return
 
-        self.cache.upsert_asset(asset, mtime)
+        self.cache.upsert_asset(asset, mtime, source_repo=source_repo)
+        self._cache_thumbnail(asset)
         changed.append(asset.uuid)
+
+    def _cache_thumbnail(self, asset) -> None:
+        """Copy a remote asset thumbnail into the local thumbnail cache.
+
+        Cheap (file copy only) so a scan can build an offline screenshot
+        library. Rendering thumbnails for assets that lack one stays in the
+        ninja-migrate path. Failures are non-fatal.
+        """
+        if not asset.thumbnail:
+            return
+        src = Path(asset.path) / asset.thumbnail
+        if not src.exists():
+            return
+        dest_dir = self.config.local_thumbnails_dir
+        dest = dest_dir / f"{asset.uuid}{src.suffix}"
+        try:
+            if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+            self.cache.set_thumbnail_local(asset.uuid, str(dest))
+        except OSError as exc:
+            logger.warning("Could not cache thumbnail for %s: %s", asset.uuid, exc)
 
     def spot_check(self, count: int = 20) -> List[str]:
         """Randomly sample `count` UUIDs from cache.
@@ -124,6 +164,13 @@ class AssetScanner:
         For each, compare cache mtime with actual sidecar mtime on disk.
         If mtime differs, re-read sidecar and upsert.
         Returns list of changed UUIDs.
+
+        This is a cheap drift detector, not the deletion authority. A sidecar
+        that's missing at the cached path usually means the folder was moved
+        (a move leaves mtime untouched), not deleted, so we do not evict here —
+        a stale-path guess isn't trustworthy. ``full_scan`` walks the whole
+        tree and is the only place that relocates moved assets or evicts ones
+        that are truly gone.
         """
         changed: List[str] = []
         all_uuids = self.cache.get_all_uuids()
@@ -148,12 +195,12 @@ class AssetScanner:
             try:
                 disk_mtime = os.path.getmtime(sidecar_path)
             except OSError:
-                # Sidecar no longer exists on disk
-                logger.warning(
-                    "Sidecar missing during spot check, removing: %s", sidecar_path
+                # Not where the cache thinks it is — most likely moved, not
+                # deleted. Defer to full_scan, which has whole-tree ground
+                # truth; evicting here would churn a live asset out and back.
+                logger.debug(
+                    "Sidecar not at cached path during spot check: %s", sidecar_path
                 )
-                self.cache.delete_asset(uuid)
-                changed.append(uuid)
                 continue
 
             cached_mtime = self.cache.get_asset_mtime(uuid)

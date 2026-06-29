@@ -6,10 +6,16 @@ GDrive-based asset management for Maya. Browse, import, publish, and version 3D 
 
 1. **Unzip** `NinjaAssets.zip` anywhere
 2. **Open Maya**, then drag **`drag_into_maya.py`** from the unzipped folder into the Maya viewport
-3. Click **OK** on the install confirmation dialog
-4. **Restart Maya** — when prompted that `userSetup.py` was modified, click **Yes** / **Allow**
-5. On first launch, a setup dialog asks for your **asset drive location** (the shared Google Drive folder — typically inside `Shared drives`, not `My Drive`) and your **username**
-6. Click **Get Started** — you're done
+3. Click **OK** on the install confirmation dialog — NinjaAssets starts right away (no restart needed), adding a shelf button and menu
+4. On first launch, a setup dialog asks for your **asset drive location** (the shared Google Drive folder — typically inside `Shared drives`, not `My Drive`) and your **username**
+5. Click **Get Started** — you're done
+
+## Upgrading
+
+1. Drag **`drag_into_maya.py`** from the new version into the Maya viewport again
+2. Click the **NinjaAssets shelf button** — it detects the new build, reloads it in place, and opens the browser
+
+No Maya restart required. (You can also use **NinjaAssets menu → Reload / Apply Update**.)
 
 The NinjaAssets folder can be deleted after installing.
 

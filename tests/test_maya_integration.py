@@ -1,10 +1,9 @@
 """Tests for Maya integration (Phase 6) using mocked maya.cmds."""
-import os
 import sys
 import types
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -131,6 +130,21 @@ class TestImportAsset:
         from ninja_assets.maya_integration.commands import import_asset
         with pytest.raises(ValueError, match="Unsupported"):
             import_asset(asset)
+
+    def test_import_with_local_root_pulls_first(self, mock_maya_modules, tmp_path):
+        """local_root pulls the asset locally, then imports from the local copy."""
+        cmds = mock_maya_modules
+        asset = _make_asset(tmp_path)
+        local_root = tmp_path / "local"
+
+        from ninja_assets.maya_integration.commands import import_asset
+        import_asset(asset, local_root=local_root)
+
+        cmds.file.assert_called_once()
+        imported_path = cmds.file.call_args[0][0]
+        expected = local_root / asset.category / asset.name / asset.current_file
+        assert Path(imported_path) == expected
+        assert expected.exists()
 
 
 class TestReferenceAsset:

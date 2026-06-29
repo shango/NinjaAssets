@@ -4,14 +4,14 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from ninja_assets.core.exceptions import CacheError
 from ninja_assets.core.models import Asset, AssetStatus, Bounds
 
 
 class CacheDB:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, db_path=None):
         """If db_path is None, use ':memory:' for testing."""
@@ -95,9 +95,36 @@ class CacheDB:
                 CREATE INDEX IF NOT EXISTS idx_assets_modified ON assets(modified_at);
                 """
             )
+            self._migrate_schema(conn)
 
-    def upsert_asset(self, asset: Asset, mtime: float) -> None:
-        """INSERT OR REPLACE into assets."""
+    def _migrate_schema(self, conn):
+        """Idempotently bring the assets table up to the current schema.
+
+        The cache is rebuildable, so additive ALTER TABLE migrations are safe:
+        any existing file-backed DB created at schema v1 gets the new columns
+        without losing data, and rescanning repopulates them.
+        """
+        existing = {
+            row["name"] for row in conn.execute("PRAGMA table_info(assets)").fetchall()
+        }
+        if "source_repo" not in existing:
+            conn.execute("ALTER TABLE assets ADD COLUMN source_repo TEXT")
+        if "local_path" not in existing:
+            conn.execute("ALTER TABLE assets ADD COLUMN local_path TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_assets_source_repo "
+            "ON assets(source_repo)"
+        )
+
+    def upsert_asset(
+        self, asset: Asset, mtime: float, source_repo: Optional[str] = None
+    ) -> None:
+        """INSERT OR REPLACE into assets.
+
+        ``source_repo`` records which remote the asset came from. Existing
+        ``local_path`` and ``thumbnail_local`` values are preserved across
+        rescans (INSERT OR REPLACE deletes the old row, so we carry them over).
+        """
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         tags_json = json.dumps(asset.tags) if asset.tags else None
 
@@ -110,14 +137,30 @@ class CacheDB:
         poly_count = latest.poly_count if latest else None
 
         with self._get_connection() as conn:
+            prev = conn.execute(
+                "SELECT local_path, thumbnail_local, source_repo "
+                "FROM assets WHERE uuid = ?",
+                (asset.uuid,),
+            ).fetchone()
+            local_path = asset.local_path or (prev["local_path"] if prev else None)
+            thumbnail_local = prev["thumbnail_local"] if prev else None
+            # Preserve the recorded origin when a caller (spot_check, resolver)
+            # re-upserts without specifying it.
+            resolved_repo = (
+                source_repo
+                if source_repo is not None
+                else (asset.source_repo or (prev["source_repo"] if prev else None))
+            )
+
             conn.execute(
                 """
                 INSERT OR REPLACE INTO assets
                     (uuid, name, path, current_version, current_file, type,
                      category, status, tags, poly_count, bounds_x, bounds_y,
                      bounds_z, thumbnail_path, thumbnail_local, created_by,
-                     modified_at, meta_file_mtime, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     modified_at, meta_file_mtime, synced_at, source_repo,
+                     local_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     asset.uuid,
@@ -134,11 +177,13 @@ class CacheDB:
                     bounds_y,
                     bounds_z,
                     asset.thumbnail,
-                    None,  # thumbnail_local
+                    thumbnail_local,
                     latest.created_by if latest else None,
                     asset.modified_at.isoformat() + "Z",
                     mtime,
                     now,
+                    resolved_repo,
+                    local_path,
                 ),
             )
 
@@ -163,6 +208,7 @@ class CacheDB:
         category=None,
         status=None,
         tags=None,
+        source_repo=None,
         limit=100,
         offset=0,
     ) -> List[Asset]:
@@ -179,6 +225,9 @@ class CacheDB:
         if status:
             clauses.append("status = ?")
             params.append(status if isinstance(status, str) else status.value)
+        if source_repo:
+            clauses.append("source_repo = ?")
+            params.append(source_repo)
 
         where = ""
         if clauses:
@@ -207,6 +256,31 @@ class CacheDB:
             ).fetchall()
             return {row["category"]: row["cnt"] for row in rows}
 
+    def get_repos_with_counts(self) -> Dict[str, int]:
+        """GROUP BY source_repo and return counts (skips NULL/unknown)."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT source_repo, COUNT(*) as cnt FROM assets "
+                "WHERE source_repo IS NOT NULL GROUP BY source_repo"
+            ).fetchall()
+            return {row["source_repo"]: row["cnt"] for row in rows}
+
+    def set_local_path(self, uuid: str, local_path: Optional[str]) -> None:
+        """Record where an asset has been pulled to on the local repo."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE assets SET local_path = ? WHERE uuid = ?",
+                (local_path, uuid),
+            )
+
+    def set_thumbnail_local(self, uuid: str, thumbnail_local: Optional[str]) -> None:
+        """Record the locally cached thumbnail path for an asset."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE assets SET thumbnail_local = ? WHERE uuid = ?",
+                (thumbnail_local, uuid),
+            )
+
     def get_all_uuids(self) -> List[str]:
         """Get all asset UUIDs (needed by scanner)."""
         with self._get_connection() as conn:
@@ -222,6 +296,28 @@ class CacheDB:
             if row is None:
                 return None
             return row["meta_file_mtime"]
+
+    def get_meta_state(self, uuid: str) -> Optional[Tuple[float, str]]:
+        """Return ``(meta_file_mtime, path)`` for a uuid, or None if absent.
+
+        Lets the scanner check the change signal (mtime) and the recorded
+        location in a single query on the hot path, so a moved folder can be
+        absorbed with a cheap path update instead of a full re-upsert.
+        """
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT meta_file_mtime, path FROM assets WHERE uuid = ?", (uuid,)
+            ).fetchone()
+            if row is None:
+                return None
+            return (row["meta_file_mtime"], row["path"])
+
+    def set_path(self, uuid: str, path: str) -> None:
+        """Update only the on-disk location of an asset (used to absorb moves)."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE assets SET path = ? WHERE uuid = ?", (path, uuid)
+            )
 
     def get_sync_state(self, key: str) -> Optional[str]:
         """Get a sync state value by key."""
@@ -253,6 +349,7 @@ class CacheDB:
                 x=row["bounds_x"], y=row["bounds_y"], z=row["bounds_z"]
             )
 
+        keys = row.keys()
         return Asset(
             uuid=row["uuid"],
             name=row["name"],
@@ -265,4 +362,6 @@ class CacheDB:
             tags=tags,
             thumbnail=row["thumbnail_path"],
             bounds=bounds,
+            source_repo=row["source_repo"] if "source_repo" in keys else None,
+            local_path=row["local_path"] if "local_path" in keys else None,
         )

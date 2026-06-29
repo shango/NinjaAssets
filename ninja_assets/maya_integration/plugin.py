@@ -25,6 +25,21 @@ _config = None
 _cache = None
 
 
+def is_initialized():
+    """True once initialize() has built the cache for this session."""
+    return _cache is not None
+
+
+def launch():
+    """Shelf/menu entry point: apply any pending update, then open the browser.
+
+    Delegates to the reload helper so that re-dragging the installer and then
+    clicking the shelf icon hot-reloads new code without a Maya restart.
+    """
+    from ninja_assets.maya_integration import reload as _reload
+    _reload.launch()
+
+
 def get_config():
     """Get the active NinjaConfig instance."""
     return _config
@@ -40,12 +55,15 @@ def get_sync_engine():
     return _sync_engine
 
 
-def initialize(config=None):
+def initialize(config=None, initial_scan=True):
     """
     Initialize NinjaAssets.
 
     Args:
         config: Optional NinjaConfig. If None, loads from disk.
+        initial_scan: When True (normal startup) the sync engine does a full
+            scan of every remote on start. Pass False on a hot-reload so an
+            upgrade reuses the warm cache instead of re-walking every remote.
 
     Returns:
         True on success, False on failure.
@@ -78,7 +96,6 @@ def initialize(config=None):
 
     # Check GDrive accessibility
     if not _config.gdrive_root.exists():
-        from ninja_assets.core.exceptions import GDriveOfflineError
         cmds.warning(
             f"NinjaAssets: GDrive not accessible at {_config.gdrive_root}. "
             "Check Google Drive Desktop is running."
@@ -100,7 +117,7 @@ def initialize(config=None):
         cache=_cache,
         on_assets_changed=_on_assets_changed
     )
-    _sync_engine.start()
+    _sync_engine.start(initial_scan=initial_scan)
 
     # Create menu and shelf
     from ninja_assets.maya_integration.menu import create_menu
@@ -176,15 +193,23 @@ def show_browser():
 
 
 def shutdown():
-    """Cleanup on Maya exit."""
-    global _sync_engine, _main_window
+    """Cleanup on Maya exit or before a hot-reload."""
+    global _sync_engine, _main_window, _cache, _config
 
-    from ninja_assets.maya_integration.hotkeys import unregister_hotkeys
-    unregister_hotkeys()
+    try:
+        from ninja_assets.maya_integration.hotkeys import unregister_hotkeys
+        unregister_hotkeys()
+    except Exception:
+        logger.exception("Error unregistering hotkeys during shutdown")
 
     if _sync_engine:
         _sync_engine.stop()
         _sync_engine = None
     if _main_window:
-        _main_window.close()
+        try:
+            _main_window.close()
+        except Exception:
+            logger.exception("Error closing window during shutdown")
         _main_window = None
+    _cache = None
+    _config = None

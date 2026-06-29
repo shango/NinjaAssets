@@ -1,5 +1,4 @@
 """Maya-specific utility helpers"""
-import os
 from pathlib import Path
 
 
@@ -28,7 +27,6 @@ def get_scene_folder_and_name(scene_path):
     e.g. '/scenes/rigging/hero/hero_rigging_v003.ma' -> (Path('/scenes/rigging/hero'), 'hero_rigging')
     Strips version suffix like _v001, _v002, etc.
     """
-    from pathlib import Path
     import re
     p = Path(scene_path)
     folder = p.parent

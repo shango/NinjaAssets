@@ -207,3 +207,82 @@ class TestCacheDB:
 
         # Should still be only one asset
         assert len(db.get_all_uuids()) == 1
+
+
+class TestSourceRepo:
+    def test_upsert_records_source_repo(self):
+        db = CacheDB()
+        db.upsert_asset(make_asset(uuid="a1"), mtime=1.0, source_repo="studio")
+        result = db.get_asset("a1")
+        assert result.source_repo == "studio"
+
+    def test_search_filters_by_source_repo(self):
+        db = CacheDB()
+        db.upsert_asset(make_asset(uuid="a1", name="Sword"), 1.0, source_repo="studio")
+        db.upsert_asset(make_asset(uuid="a2", name="Shield"), 1.0, source_repo="archive")
+
+        studio = db.search_assets(source_repo="studio")
+        assert [a.uuid for a in studio] == ["a1"]
+
+    def test_source_repo_preserved_on_reupsert_without_it(self):
+        """spot_check/resolver re-upsert without source_repo must not clobber it."""
+        db = CacheDB()
+        db.upsert_asset(make_asset(uuid="a1"), 1.0, source_repo="studio")
+        # Re-upsert as spot_check does: fresh asset from sidecar, no source_repo.
+        db.upsert_asset(make_asset(uuid="a1", name="Updated"), 2.0)
+        result = db.get_asset("a1")
+        assert result.name == "Updated"
+        assert result.source_repo == "studio"
+
+    def test_get_repos_with_counts(self):
+        db = CacheDB()
+        db.upsert_asset(make_asset(uuid="a1"), 1.0, source_repo="studio")
+        db.upsert_asset(make_asset(uuid="a2"), 1.0, source_repo="studio")
+        db.upsert_asset(make_asset(uuid="a3"), 1.0, source_repo="archive")
+        assert db.get_repos_with_counts() == {"studio": 2, "archive": 1}
+
+    def test_set_local_path_and_preserved_on_rescan(self):
+        db = CacheDB()
+        db.upsert_asset(make_asset(uuid="a1"), 1.0, source_repo="studio")
+        db.set_local_path("a1", "/local/props/sword/sword.obj")
+        assert db.get_asset("a1").local_path == "/local/props/sword/sword.obj"
+
+        # A rescan (re-upsert) must not clobber the recorded local path.
+        db.upsert_asset(make_asset(uuid="a1", name="SwordV2"), 2.0, source_repo="studio")
+        result = db.get_asset("a1")
+        assert result.name == "SwordV2"
+        assert result.local_path == "/local/props/sword/sword.obj"
+
+
+class TestSchemaMigration:
+    def test_v1_db_gets_new_columns(self, tmp_path):
+        """A file DB created at schema v1 is migrated to include new columns."""
+        import sqlite3
+
+        db_path = tmp_path / "cache.sqlite"
+        # Hand-build a minimal v1 assets table (no source_repo/local_path).
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """
+            CREATE TABLE assets (
+                uuid TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL,
+                current_version INTEGER NOT NULL, current_file TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'model', category TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'wip', tags TEXT, poly_count INTEGER,
+                bounds_x REAL, bounds_y REAL, bounds_z REAL,
+                thumbnail_path TEXT, thumbnail_local TEXT, created_by TEXT,
+                modified_at TEXT NOT NULL, meta_file_mtime REAL, synced_at TEXT NOT NULL
+            );
+            CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        # Opening through CacheDB should migrate it without error.
+        db = CacheDB(db_path)
+        db.upsert_asset(make_asset(uuid="a1"), 1.0, source_repo="studio")
+        result = db.get_asset("a1")
+        assert result.source_repo == "studio"
+        assert result.local_path is None

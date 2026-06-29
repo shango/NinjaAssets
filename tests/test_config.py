@@ -1,9 +1,11 @@
 """Tests for NinjaConfig."""
 
-import platform
 from pathlib import Path
 
-from ninja_assets.config import NinjaConfig, _default_gdrive_root
+from ninja_assets.config import (
+    NinjaConfig, Repo, find_remote_by_path, find_remote_by_name,
+    _default_gdrive_root,
+)
 from ninja_assets.constants import CATEGORIES, STATUSES
 
 
@@ -20,7 +22,7 @@ class TestNinjaConfigNoEnsureDirs:
 
     def test_ensure_dirs_creates_dirs(self, tmp_path):
         local = tmp_path / "local_dir"
-        config = NinjaConfig(
+        NinjaConfig(
             gdrive_root=tmp_path / "gdrive",
             local_data_dir=local,
             _ensure_dirs=True,
@@ -37,11 +39,11 @@ class TestNinjaConfigDefaults:
         assert config.sync_interval_seconds == 60
         assert config.changelog_poll_interval == 30
         assert config.spot_check_count == 20
-        assert config.thumbnail_size == (256, 256)
+        assert config.thumbnail_size == (512, 512)
         assert config.thumbnail_format == "jpg"
         assert config.thumbnail_quality == 85
-        assert config.grid_thumbnail_size == 100
-        assert config.preview_thumbnail_size == 250
+        assert config.grid_thumbnail_size == 128
+        assert config.preview_thumbnail_size == 400
         assert config.categories == list(CATEGORIES)
         assert config.statuses == list(STATUSES)
         assert config.username is None
@@ -105,6 +107,90 @@ class TestNinjaConfigSaveLoad:
         config = NinjaConfig.load(local_data_dir=local, _ensure_dirs=False)
         assert config.sync_interval_seconds == 60
         assert config.username is None
+
+
+class TestRepos:
+    def test_remote_repos_fallback_to_gdrive(self, tmp_path):
+        """With no remotes configured, gdrive_root is the single default remote."""
+        config = NinjaConfig(
+            gdrive_root=tmp_path / "gdrive",
+            local_data_dir=tmp_path / "local",
+            _ensure_dirs=False,
+        )
+        remotes = config.remote_repos()
+        assert len(remotes) == 1
+        assert remotes[0].name == "GDrive"
+        assert remotes[0].path == tmp_path / "gdrive"
+
+    def test_remote_repos_uses_configured_enabled_only(self, tmp_path):
+        config = NinjaConfig(
+            gdrive_root=tmp_path / "gdrive",
+            local_data_dir=tmp_path / "local",
+            remotes=[
+                Repo("studio", tmp_path / "studio"),
+                Repo("archive", tmp_path / "archive", enabled=False),
+            ],
+            _ensure_dirs=False,
+        )
+        remotes = config.remote_repos()
+        assert [r.name for r in remotes] == ["studio"]
+
+    def test_assets_root_for(self, tmp_path):
+        config = NinjaConfig(_ensure_dirs=False)
+        repo = Repo("studio", tmp_path / "studio")
+        assert config.assets_root_for(repo) == tmp_path / "studio" / "assets"
+
+    def test_save_load_round_trip_repos(self, tmp_path):
+        local = tmp_path / "local"
+        local.mkdir()
+        config = NinjaConfig(
+            gdrive_root=tmp_path / "gdrive",
+            local_data_dir=local,
+            remotes=[
+                Repo("studio", tmp_path / "studio"),
+                Repo("archive", tmp_path / "archive", enabled=False),
+            ],
+            local_repo=tmp_path / "mylocal",
+            _ensure_dirs=False,
+        )
+        config.save()
+
+        loaded = NinjaConfig.load(local_data_dir=local, _ensure_dirs=False)
+        assert loaded.local_repo == tmp_path / "mylocal"
+        assert len(loaded.remotes) == 2
+        assert loaded.remotes[0].name == "studio"
+        assert loaded.remotes[0].path == tmp_path / "studio"
+        assert loaded.remotes[1].enabled is False
+
+    def test_local_repo_created_when_ensure_dirs(self, tmp_path):
+        local_repo = tmp_path / "pulled"
+        NinjaConfig(
+            gdrive_root=tmp_path / "gdrive",
+            local_data_dir=tmp_path / "local",
+            local_repo=local_repo,
+            _ensure_dirs=True,
+        )
+        assert local_repo.exists()
+
+
+class TestDuplicateRemoteGuards:
+    def test_find_remote_by_path_matches_normalized(self, tmp_path):
+        remotes = [Repo("studio", tmp_path / "studio")]
+        # Trailing slash / redundant separators should still match.
+        assert find_remote_by_path(remotes, str(tmp_path / "studio") + "/") is not None
+        assert find_remote_by_path(remotes, tmp_path / "studio") is not None
+
+    def test_find_remote_by_path_no_false_positive(self, tmp_path):
+        remotes = [Repo("studio", tmp_path / "studio")]
+        assert find_remote_by_path(remotes, tmp_path / "archive") is None
+        # A parent/sibling path must not be treated as a duplicate.
+        assert find_remote_by_path(remotes, tmp_path / "studio" / "..") is None
+
+    def test_find_remote_by_name_case_insensitive(self):
+        remotes = [Repo("Studio", "/a"), Repo("Archive", "/b")]
+        assert find_remote_by_name(remotes, "studio").path == Path("/a")
+        assert find_remote_by_name(remotes, "  ARCHIVE ").path == Path("/b")
+        assert find_remote_by_name(remotes, "vault") is None
 
 
 class TestFakeGDriveFixture:

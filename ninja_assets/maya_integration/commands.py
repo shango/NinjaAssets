@@ -1,17 +1,69 @@
 """Maya commands for asset import, reference, and scene versioning"""
+import logging
+import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from ninja_assets.core.models import Asset, Version
 from ninja_assets.core.scene_meta import SceneMetaManager
+from ninja_assets.core.sidecar import SidecarManager
+
+logger = logging.getLogger(__name__)
 
 
-def import_asset(asset: Asset, version: Optional[int] = None) -> list:
-    """Import asset into current scene. Returns list of imported nodes."""
+def pull_asset(
+    asset: Asset, version: Optional[int], local_root: Union[str, Path]
+) -> Path:
+    """Copy an asset version from its remote folder into the local repo.
+
+    Copies the version file plus its .meta.json sidecar and thumbnail (when
+    present) into ``local_root/<category>/<name>/``. Idempotent: a file is only
+    copied when missing or older than the source. Returns the local file path.
+    """
+    local_root = Path(local_root)
+    remote_file = _get_asset_file_path(asset, version)
+    if not remote_file.exists():
+        raise FileNotFoundError(f"Asset file not found: {remote_file}")
+
+    dest_dir = local_root / asset.category / asset.name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    remote_folder = Path(asset.path)
+    extras = []
+    sidecar = SidecarManager.get_sidecar_path(remote_folder, asset.name)
+    if sidecar.exists():
+        extras.append(sidecar)
+    if asset.thumbnail:
+        thumb = remote_folder / asset.thumbnail
+        if thumb.exists():
+            extras.append(thumb)
+
+    for src in [remote_file, *extras]:
+        dest = dest_dir / src.name
+        if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
+            shutil.copy2(src, dest)
+
+    return dest_dir / remote_file.name
+
+
+def import_asset(
+    asset: Asset,
+    version: Optional[int] = None,
+    local_root: Optional[Union[str, Path]] = None,
+) -> list:
+    """Import asset into current scene. Returns list of imported nodes.
+
+    When ``local_root`` is given, the asset is first pulled to the local repo
+    and imported from that local copy; otherwise it is imported from its
+    remote path.
+    """
     import maya.cmds as cmds
 
-    file_path = _get_asset_file_path(asset, version)
+    if local_root is not None:
+        file_path = pull_asset(asset, version, local_root)
+    else:
+        file_path = _get_asset_file_path(asset, version)
     if not file_path.exists():
         raise FileNotFoundError(f"Asset file not found: {file_path}")
 
@@ -31,11 +83,22 @@ def import_asset(asset: Asset, version: Optional[int] = None) -> list:
     return imported
 
 
-def reference_asset(asset: Asset, version: Optional[int] = None) -> str:
-    """Create a reference to an asset. Returns reference node name."""
+def reference_asset(
+    asset: Asset,
+    version: Optional[int] = None,
+    local_root: Optional[Union[str, Path]] = None,
+) -> str:
+    """Create a reference to an asset. Returns reference node name.
+
+    When ``local_root`` is given, the asset is pulled to the local repo first
+    and referenced from that local copy.
+    """
     import maya.cmds as cmds
 
-    file_path = _get_asset_file_path(asset, version)
+    if local_root is not None:
+        file_path = pull_asset(asset, version, local_root)
+    else:
+        file_path = _get_asset_file_path(asset, version)
     if not file_path.exists():
         raise FileNotFoundError(f"Asset file not found: {file_path}")
 

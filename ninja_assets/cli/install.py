@@ -15,6 +15,8 @@ import os
 import platform
 import shutil
 import sys
+import time
+import uuid
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent  # ninja_assets/
@@ -102,12 +104,18 @@ def install(scripts_dir, use_symlink=True):
         shutil.copytree(str(PACKAGE_ROOT), str(target))
         print(f"  Copied to: {target}")
 
+    # Stamp this build so a running Maya session can hot-reload the new code
+    # (via the shelf button) instead of needing a restart. Resolve through the
+    # target so the stamp lands in the real package dir whether copied or symlinked.
+    write_build_stamp(target.resolve())
+
     # Inject userSetup.py hook
     setup_file = scripts_dir / "userSetup.py"
     _inject_hook(setup_file)
 
-    print(f"\n  Installation complete.")
-    print(f"  Restart Maya to load NinjaAssets.")
+    print("\n  Installation complete.")
+    print("  First run: restart Maya (or run plugin.initialize()).")
+    print("  Upgrades: click the NinjaAssets shelf button to apply — no restart.")
 
 
 def uninstall(scripts_dir):
@@ -129,6 +137,18 @@ def uninstall(scripts_dir):
     print("  Uninstall complete.")
 
 
+def write_build_stamp(pkg_dir):
+    """Write a unique per-install build stamp into the package directory.
+
+    The running plugin compares this against the value it loaded at import time
+    to decide whether a newer build is waiting on disk. Returns the value.
+    """
+    pkg_dir = Path(pkg_dir)
+    value = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    (pkg_dir / "_build_stamp.txt").write_text(value, encoding="utf-8")
+    return value
+
+
 def _inject_hook(setup_file):
     """Add NinjaAssets init hook to userSetup.py, preserving existing content."""
     existing = ""
@@ -137,7 +157,7 @@ def _inject_hook(setup_file):
 
     # Already installed?
     if HOOK_START in existing:
-        print(f"  userSetup.py already has NinjaAssets hook (skipped)")
+        print("  userSetup.py already has NinjaAssets hook (skipped)")
         return
 
     # Append hook
